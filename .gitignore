@@ -6,6 +6,10 @@
 venv/
 env/
 
+# uv 缓存与临时文件
+.uv/
+uv.lock.bak
+
 # Python 编译产物
 __pycache__/
 *.py[cod]
