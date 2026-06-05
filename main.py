@@ -20,7 +20,7 @@ from fastapi import (
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -89,11 +89,10 @@ async def index(
 
 @app.post("/upload")
 async def upload(
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_session),
 ):
-    """上传 TXT: 落盘 -> 解析入库 -> 触发后台翻译 -> 跳转阅读器。"""
+    """上传 TXT: 落盘 -> 解析入库 -> 跳转阅读器。默认不翻译, 翻译需在阅读器页手动触发。"""
     filename = file.filename or "untitled.txt"
     if not filename.lower().endswith(".txt"):
         raise HTTPException(status_code=400, detail="仅支持 .txt 文件")
@@ -127,10 +126,44 @@ async def upload(
         chapters_data=chapters_data,
     )
 
-    # 触发后台翻译
-    background_tasks.add_task(translate_book_background, book.id, async_session_maker)
-
+    # 默认不自动翻译, 用户在阅读器页点击"开始翻译"按钮手动触发
     return RedirectResponse(url=f"/read/{book.id}", status_code=303)
+
+
+@app.post("/translate/{book_id}")
+async def trigger_translate(
+    book_id: int,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    手动触发翻译。幂等:
+      - 书籍不存在          -> 404
+      - 段落数 0            -> 200 {status: "empty"}
+      - 已全部完成          -> 200 {status: "done"}
+      - 有段落正在翻译中    -> 200 {status: "running"}
+      - 否则                -> 200 {status: "started"}, 启动后台任务
+    """
+    book = await session.get(Book, book_id)
+    if book is None:
+        raise HTTPException(status_code=404, detail="书籍不存在")
+    if book.total_paragraphs == 0:
+        return {"status": "empty", "message": "书籍无段落可译"}
+    if book.translated_count >= book.total_paragraphs:
+        return {"status": "done", "message": "全部段落已翻译完成"}
+
+    in_progress = (
+        await session.execute(
+            select(func.count(Paragraph.id))
+            .join(Chapter, Paragraph.chapter_id == Chapter.id)
+            .where(Chapter.book_id == book_id, Paragraph.status == 1)
+        )
+    ).scalar() or 0
+    if in_progress > 0:
+        return {"status": "running", "message": "翻译正在进行中"}
+
+    background_tasks.add_task(translate_book_background, book.id, async_session_maker)
+    return {"status": "started", "message": "已加入翻译队列"}
 
 
 @app.get("/read/{book_id}")

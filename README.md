@@ -9,7 +9,7 @@
 ## 特性
 
 - **TXT 解析**: 正则识别"第 X 章 / 回 / 节 / 卷 / 篇"与"Chapter X", 按非空行拆段
-- **异步翻译**: FastAPI `BackgroundTasks` + `httpx` 调 DeepSeek; 滑动窗口取 N-1 / N-2 中文作语境, Prompt 明确"只输出当前段译文"; `asyncio.Semaphore` 限流并发
+- **异步翻译**: 默认**不自动翻译**, 用户在阅读器顶部点击"开始翻译"手动触发; FastAPI `BackgroundTasks` + `httpx` 调 DeepSeek, 滑动窗口取 N-1 / N-2 中文作语境, Prompt 明确"只输出当前段译文", `asyncio.Semaphore` 限流并发
 - **三种阅读模式** (Alpine.js):
   - **纯中文**: 仅渲染中文段落
   - **纯英文**: 点击英文段落, `x-transition` 平滑展开对应中文 (手风琴)
@@ -125,7 +125,8 @@ vibe_reading/
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET`  | `/` | 首页 (书架 + 上传) |
-| `POST` | `/upload` | 接收 TXT → 解析入库 → 触发后台翻译 → 303 跳转阅读器 |
+| `POST` | `/upload` | 接收 TXT → 解析入库 → 303 跳转阅读器 (**不自动翻译**) |
+| `POST` | `/translate/{book_id}` | 手动触发翻译; 幂等 (已全部完成/有段落进行中时直接返回) |
 | `GET`  | `/read/{book_id}` | 渲染阅读器 |
 | `GET`  | `/api/progress/{book_id}` | 返回 `{total, translated}`, 前端 3 秒轮询 |
 | `GET`  | `/docs` | FastAPI 自动生成的 Swagger UI |
@@ -147,7 +148,7 @@ vibe_reading/
 2. 对每段, 把 N-1 / N-2 的**中文原文** (非译文) 塞入 Prompt 上下文
 3. `asyncio.Semaphore(MAX_CONCURRENT)` 限制并发, 避免触发 DeepSeek 限流
 4. 翻译完成立即 UPDATE 段落, 刷新 `Book.translated_count` (供前端轮询)
-5. 通过 `BackgroundTasks.add_task` 启动, 翻译与上传响应并行, 不阻塞
+5. **触发方式**: 上传时**不自动**启动; 由前端 `POST /translate/{book_id}` 手动触发, 后端用 `BackgroundTasks.add_task` 启动, 不阻塞响应
 
 ### 阅读器 (`templates/reader.html`)
 

@@ -11,26 +11,43 @@
 -->
 <div
     x-data="{
+        bookId: {{ book.id }},
         mode: 'zh',
         expandedId: null,
         translated: {{ book.translated_count }},
         total: {{ book.total_paragraphs }},
+        translateError: null,
+        _timer: null,
         init() {
-            if (this.translated < this.total) {
+            if (this.total > 0) {
                 this._timer = setInterval(async () => {
                     try {
-                        const res = await fetch('/api/progress/{{ book.id }}');
+                        const res = await fetch(`/api/progress/${this.bookId}`);
                         const data = await res.json();
                         this.translated = data.translated;
                         this.total = data.total;
-                        if (this.translated >= this.total) {
+                        if (this.translated >= this.total && this.total > 0) {
                             clearInterval(this._timer);
+                            this._timer = null;
                         }
                     } catch (e) { /* ignore */ }
                 }, 3000);
             }
         },
-        destroy() { clearInterval(this._timer); }
+        destroy() {
+            if (this._timer) clearInterval(this._timer);
+        },
+        startTranslation() {
+            fetch(`/translate/${this.bookId}`, { method: 'POST' })
+                .then(res => res.json().then(body => ({ ok: res.ok, status: res.status, body })))
+                .then(({ ok, status, body }) => {
+                    if (ok) return;
+                    this.translateError = body?.detail || body?.message || `启动失败 (HTTP ${status})`;
+                })
+                .catch(() => {
+                    this.translateError = '网络错误, 请检查服务是否运行';
+                });
+        }
     }"
     class="space-y-6"
 >
@@ -40,15 +57,40 @@
             <div class="min-w-0">
                 <a href="/" class="text-xs text-slate-500 hover:text-indigo-600">← 返回书架</a>
                 <h1 class="text-2xl font-bold text-slate-800 mt-1 truncate">{{ book.title }}</h1>
-                <div class="text-xs text-slate-500 mt-1 flex items-center gap-2">
+                <div class="text-xs text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
                     <span>翻译进度:</span>
                     <span class="font-mono text-indigo-600" x-text="`${translated} / ${total}`"></span>
-                    <template x-if="translated < total">
+
+                    <!-- 未开始: 显示开始翻译按钮 -->
+                    <template x-if="translated === 0 && total > 0 && !translateError">
+                        <button
+                            type="button"
+                            @click="startTranslation()"
+                            class="ml-1 px-3 py-1 text-xs font-medium bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition shadow-sm"
+                        >开始翻译</button>
+                    </template>
+
+                    <!-- 错误: 显示错误与重试 -->
+                    <template x-if="translateError">
+                        <span class="inline-flex items-center gap-2 text-red-500">
+                            <span x-text="translateError"></span>
+                            <button
+                                type="button"
+                                @click="translateError = null; startTranslation()"
+                                class="px-2 py-0.5 text-xs font-medium bg-red-50 text-red-600 rounded hover:bg-red-100"
+                            >重试</button>
+                        </span>
+                    </template>
+
+                    <!-- 翻译中 -->
+                    <template x-if="translated > 0 && translated < total && !translateError">
                         <span class="inline-flex items-center gap-1 text-slate-400">
                             <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
                             后台翻译中…
                         </span>
                     </template>
+
+                    <!-- 全部完成 -->
                     <template x-if="translated >= total && total > 0">
                         <span class="text-emerald-600">✓ 全部完成</span>
                     </template>
@@ -115,7 +157,7 @@
                 {% if p.translated %}
                     {{ p.translated }}
                 {% else %}
-                    <span class="text-slate-400 not-italic">⟳ 翻译中…</span>
+                    <span class="text-slate-400 not-italic">⟳ 未翻译</span>
                 {% endif %}
             </p>
 
@@ -141,7 +183,7 @@
     </div>
 
     <p class="text-center text-xs text-slate-400 pt-2">
-        纯英文模式下, 点击英文段落展开中文原文 · 进度每 3 秒自动刷新
+        默认纯中文阅读 · 翻译需手动点击顶部"开始翻译" · 纯英文模式下点击英文段落展开中文
     </p>
 </div>
 {% endblock %}
