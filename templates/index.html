@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Vibe Reading - 首页{% endblock %}
+{% block content %}
+
+<!-- 上传区 -->
+<div class="bg-white rounded-lg shadow-sm p-6 mb-6">
+    <h2 class="text-lg font-semibold mb-1">上传 TXT 电子书</h2>
+    <p class="text-xs text-slate-500 mb-4">
+        上传后会自动识别章节, 并由 DeepSeek 在后台逐段翻译。可随时刷新页面查看进度。
+    </p>
+    <form
+        action="/upload"
+        method="post"
+        enctype="multipart/form-data"
+        class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3"
+    >
+        <input
+            type="file"
+            name="file"
+            accept=".txt"
+            required
+            class="flex-1 text-sm text-slate-600
+                   file:mr-4 file:py-2 file:px-4
+                   file:rounded-full file:border-0
+                   file:text-sm file:font-semibold
+                   file:bg-indigo-50 file:text-indigo-700
+                   hover:file:bg-indigo-100 cursor-pointer"
+        />
+        <button
+            type="submit"
+            class="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-full hover:bg-indigo-700 transition"
+        >
+            上传并开始翻译
+        </button>
+    </form>
+</div>
+
+<!-- 书架 -->
+<div class="bg-white rounded-lg shadow-sm p-6">
+    <h2 class="text-lg font-semibold mb-4">我的书架</h2>
+    {% if books %}
+    <ul class="divide-y divide-slate-100">
+        {% for book in books %}
+        <li class="py-4 flex items-center justify-between gap-4">
+            <div class="min-w-0 flex-1">
+                <a
+                    href="/read/{{ book.id }}"
+                    class="text-indigo-600 font-medium hover:underline truncate block"
+                >
+                    {{ book.title }}
+                </a>
+                <div class="text-xs text-slate-400 mt-1">
+                    共 {{ book.total_paragraphs }} 段 · 已翻译 {{ book.translated_count }} 段
+                    · {{ book.created_at.strftime('%Y-%m-%d %H:%M') }}
+                </div>
+            </div>
+            <a
+                href="/read/{{ book.id }}"
+                class="px-3 py-1.5 text-sm bg-slate-100 hover:bg-slate-200 rounded-md transition shrink-0"
+            >
+                阅读
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-slate-400 text-center py-10">还没有书籍, 上传你的第一本 TXT 吧 ✨</p>
+    {% endif %}
+</div>
+
+{% endblock %}

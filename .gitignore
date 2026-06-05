@@ -1,0 +1,38 @@
+# 环境变量 (含 API Key, 不入库)
+.env
+
+# Python 虚拟环境
+.venv/
+venv/
+env/
+
+# Python 编译产物
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# 数据库 (运行时生成)
+vibe_reading.db
+vibe_reading.db-journal
+*.db
+*.sqlite
+*.sqlite3
+
+# 上传的 TXT 文件 (运行时生成)
+uploads/*
+!uploads/.gitkeep
+
+# 静态目录占位
+static/*
+!static/.gitkeep
+
+# IDE / 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# 日志
+*.log
