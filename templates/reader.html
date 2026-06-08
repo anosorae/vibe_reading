@@ -276,6 +276,9 @@
                         this.chapterStatus[ch.id] = ch;
                         if (!prev || prev.status !== ch.status || prev.translated_count !== ch.translated_count) {
                             this.updateBadge(ch);
+                            if (ch.id === this.activeChapterId && (ch.status === 'done' || ch.translated_count > (prev ? prev.translated_count : 0))) {
+                                this.loadChapter(ch.id);
+                            }
                         }
                         if (ch.status === 'pending' || ch.status === 'in_progress' || ch.status === 'partial') {
                             hasPending = true;
