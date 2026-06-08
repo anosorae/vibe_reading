@@ -267,6 +267,25 @@ async def upload(
     return RedirectResponse(url=f"/?uploaded={book.id}", status_code=303)
 
 
+@app.post("/delete/{book_id}")
+async def delete_book(
+    book_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    """删除书籍: 删 DB (cascade 删 chapters/paragraphs) + 删上传文件。"""
+    book = await session.get(Book, book_id)
+    if book is None:
+        raise HTTPException(status_code=404, detail="书籍不存在")
+    # 删除上传文件 (忽略不存在)
+    try:
+        Path(book.file_path).unlink(missing_ok=True)
+    except OSError:
+        pass
+    await session.delete(book)
+    await session.commit()
+    return RedirectResponse(url="/", status_code=303)
+
+
 @app.get("/read/{book_id}")
 async def read(
     book_id: int,

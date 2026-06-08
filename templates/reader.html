@@ -173,6 +173,9 @@
                 this.mode = m;
                 document.body.classList.remove('mode-zh', 'mode-en', 'mode-both');
                 document.body.classList.add('mode-' + m);
+                if (m !== 'zh' && this.activeChapterId) {
+                    this.maybeTranslateChapter(this.activeChapterId);
+                }
             },
             navigateTo(id) {
                 this.activeChapterId = id;
@@ -245,6 +248,15 @@
             maybeTranslateNext(chapterId) {
                 if (chapterId == null) return;
                 if (this.mode === 'zh') return;
+                const ch = this.chapterStatus[chapterId];
+                if (!ch) return;
+                if (ch.char_count > this.chapterMaxChars) return;
+                if (ch.status === 'pending' || ch.status === 'failed' || ch.status === 'partial') {
+                    this.translateChapter(chapterId);
+                }
+            },
+            maybeTranslateChapter(chapterId) {
+                if (chapterId == null) return;
                 const ch = this.chapterStatus[chapterId];
                 if (!ch) return;
                 if (ch.char_count > this.chapterMaxChars) return;
