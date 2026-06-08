@@ -223,17 +223,20 @@
                     return;
                 }
                 const enParas = translated.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
-                const cnParas = content.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+                const cnAll = content.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
                 const blocks = [];
                 for (let i = 0; i < enParas.length; i++) {
-                    const en = enParas[i];
-                    const cn = cnParas[i] || '';
                     blocks.push(
-                        '<p class="en-para" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'block\'?\'none\':\'block\'">'
-                        + escapeHtml(en) + '</p>'
-                        + '<p class="en-original">' + escapeHtml(cn) + '</p>'
+                        '<p class="en-para" onclick="document.getElementById(\'en-original-all\').style.display=document.getElementById(\'en-original-all\').style.display===\'block\'?\'none\':\'block\'">'
+                        + escapeHtml(enParas[i]) + '</p>'
                     );
                 }
+                blocks.push(
+                    '<div id="en-original-all" class="en-original" style="display:none;margin-top:1.5rem">'
+                    + '<p style="color:#94a3b8;font-size:0.75rem;margin-bottom:0.75rem">原文</p>'
+                    + cnAll.map(p => '<p class="zh-para" style="color:#94a3b8;font-size:0.9rem">' + escapeHtml(p) + '</p>').join('')
+                    + '</div>'
+                );
                 container.innerHTML = blocks.join('');
             },
 
