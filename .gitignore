@@ -19,6 +19,7 @@ __pycache__/
 # 数据库 (运行时生成)
 vibe_reading.db
 vibe_reading.db-journal
+vibe_reading.db-*
 *.db
 *.sqlite
 *.sqlite3

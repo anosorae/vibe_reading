@@ -156,12 +156,13 @@ def _chapter_status_from_agg(chapter_id: int, title: str, agg: dict) -> dict:
     }
 
 
-def _chapter_meta_from_agg(chapter_id: int, title: str, next_chapter_id: int | None, agg: dict) -> dict:
+def _chapter_meta_from_agg(chapter_id: int, title: str, prev_chapter_id: int | None, next_chapter_id: int | None, agg: dict) -> dict:
     return {
         "id": chapter_id,
         "title": title,
         "char_count": agg["char_count"],
         "paragraph_count": agg["paragraph_count"],
+        "prev_chapter_id": prev_chapter_id,
         "next_chapter_id": next_chapter_id,
     }
 
@@ -292,6 +293,7 @@ async def read(
     chapter_list = [
         _chapter_meta_from_agg(
             ch.id, ch.title,
+            prev_chapter_id=(chapters[i - 1].id if i > 0 else None),
             next_chapter_id=(chapters[i + 1].id if i + 1 < len(chapters) else None),
             agg=agg.get(ch.id, _EMPTY_AGG),
         )
@@ -413,7 +415,7 @@ if __name__ == "__main__":
 
     uvicorn.run(
         "main:app",
-        host="0.0.0.0",
+        host="127.0.0.1",
         port=8000,
         reload=False,
         log_level="info",

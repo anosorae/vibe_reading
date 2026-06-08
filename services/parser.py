@@ -29,12 +29,14 @@ def parse_text(content: str) -> list[ChapterDict]:
     """
     解析纯文本:
     - 每个非空行视为一个段落
-    - 命中 CHAPTER_PATTERN 的行作为新章节标题
+    - 命中 CHAPTER_PATTERN 的行作为新章节标题, 前文作为独立"序章"章节
     - 若全文无章节标记, 则整本书归为一个 "全文" 章节
     """
     lines = content.splitlines()
     chapters: list[ChapterDict] = []
     current: ChapterDict | None = None
+    preamble: list[str] = []
+    found_marker = False
 
     for raw in lines:
         line = raw.strip()
@@ -43,17 +45,23 @@ def parse_text(content: str) -> list[ChapterDict]:
 
         match = CHAPTER_PATTERN.match(line)
         if match:
+            found_marker = True
             if current is not None and current["paragraphs"]:
                 chapters.append(current)
+            elif preamble:
+                chapters.append({"title": "序章", "paragraphs": preamble})
+                preamble = []
             current = {"title": match.group(1).strip(), "paragraphs": []}
         else:
-            if current is None:
-                current = {"title": "全文", "paragraphs": []}
-            current["paragraphs"].append(line)
+            if current is not None:
+                current["paragraphs"].append(line)
+            else:
+                preamble.append(line)
 
-    # 收尾
     if current is not None and current["paragraphs"]:
         chapters.append(current)
+    elif not found_marker and preamble:
+        chapters.append({"title": "全文", "paragraphs": preamble})
 
     return chapters
 
