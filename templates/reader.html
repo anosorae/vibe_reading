@@ -3,187 +3,270 @@
 
 {% block content %}
 <!--
-    顶层 x-data: 管理阅读模式
-        mode = 'zh'  -> 纯中文
-        mode = 'en'  -> 纯英文 (点击展开中文)
-        mode = 'both'-> 中英双语 (上中下英)
-    进度数据也用 Alpine 维护, 每 3 秒拉一次 /api/progress
+    性能关键设计:
+      1) 首屏 HTML 不含段落文本 - 段落通过 GET /api/chapter/{id} 懒加载
+      2) 段落 DOM 只渲染一次 (懒加载时), 切模式不重渲染 - 用 body class 切换 CSS 显示
+      3) 状态徽章用 vanilla DOM 更新 - 不用 Alpine 绑定 100 个徽章
+      4) 全 idle (done/failed/too_long/empty) 时自动停止轮询
+
+    注意: x-data 用 'reader' 引用一个 Alpine.data() 组件 (在 <script> 内注册),
+    避免在 HTML 属性里塞一坨带双引号的 JS 模板字串导致 attribute 提前截断。
 -->
-<div
-    x-data="{
+
+<!-- 服务端数据传给前端: 必须是合法 JS 表达式 -->
+<script>
+    window.VIBE_READING = {
         bookId: {{ book.id }},
-        mode: 'zh',
-        expandedId: null,
-        translated: {{ book.translated_count }},
-        total: {{ book.total_paragraphs }},
-        translateError: null,
-        _timer: null,
-        init() {
-            if (this.total > 0) {
-                this._timer = setInterval(async () => {
-                    try {
-                        const res = await fetch(`/api/progress/${this.bookId}`);
-                        const data = await res.json();
-                        this.translated = data.translated;
-                        this.total = data.total;
-                        if (this.translated >= this.total && this.total > 0) {
-                            clearInterval(this._timer);
-                            this._timer = null;
-                        }
-                    } catch (e) { /* ignore */ }
-                }, 3000);
-            }
-        },
-        destroy() {
-            if (this._timer) clearInterval(this._timer);
-        },
-        startTranslation() {
-            fetch(`/translate/${this.bookId}`, { method: 'POST' })
-                .then(res => res.json().then(body => ({ ok: res.ok, status: res.status, body })))
-                .then(({ ok, status, body }) => {
-                    if (ok) return;
-                    this.translateError = body?.detail || body?.message || `启动失败 (HTTP ${status})`;
-                })
-                .catch(() => {
-                    this.translateError = '网络错误, 请检查服务是否运行';
-                });
-        }
-    }"
-    class="space-y-6"
->
+        chapterMaxChars: {{ chapter_max_chars }},
+    };
+</script>
+
+<div x-data="reader" class="space-y-6">
     <!-- 顶部信息条 + 模式切换 -->
     <div class="bg-white rounded-lg shadow-sm p-6 sticky top-0 z-10 backdrop-blur bg-white/90">
         <div class="flex items-center justify-between mb-4 gap-4">
             <div class="min-w-0">
                 <a href="/" class="text-xs text-slate-500 hover:text-indigo-600">← 返回书架</a>
                 <h1 class="text-2xl font-bold text-slate-800 mt-1 truncate">{{ book.title }}</h1>
-                <div class="text-xs text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
-                    <span>翻译进度:</span>
-                    <span class="font-mono text-indigo-600" x-text="`${translated} / ${total}`"></span>
-
-                    <!-- 未开始: 显示开始翻译按钮 -->
-                    <template x-if="translated === 0 && total > 0 && !translateError">
-                        <button
-                            type="button"
-                            @click="startTranslation()"
-                            class="ml-1 px-3 py-1 text-xs font-medium bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition shadow-sm"
-                        >开始翻译</button>
-                    </template>
-
-                    <!-- 错误: 显示错误与重试 -->
-                    <template x-if="translateError">
-                        <span class="inline-flex items-center gap-2 text-red-500">
-                            <span x-text="translateError"></span>
-                            <button
-                                type="button"
-                                @click="translateError = null; startTranslation()"
-                                class="px-2 py-0.5 text-xs font-medium bg-red-50 text-red-600 rounded hover:bg-red-100"
-                            >重试</button>
-                        </span>
-                    </template>
-
-                    <!-- 翻译中 -->
-                    <template x-if="translated > 0 && translated < total && !translateError">
-                        <span class="inline-flex items-center gap-1 text-slate-400">
-                            <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-                            后台翻译中…
-                        </span>
-                    </template>
-
-                    <!-- 全部完成 -->
-                    <template x-if="translated >= total && total > 0">
-                        <span class="text-emerald-600">✓ 全部完成</span>
-                    </template>
-                </div>
+                <p class="text-xs text-slate-400 mt-1">
+                    共 {{ chapters|length }} 章 · 切到「英文/双语」后, 滚动章节会自动加载, 点「翻译本章」开始翻译
+                </p>
             </div>
         </div>
 
-        <!-- 模式切换按钮 -->
         <div class="inline-flex bg-slate-100 rounded-full p-1 gap-1">
-            <button
-                type="button"
-                @click="mode = 'zh'"
-                :class="mode === 'zh' ? 'mode-btn-active' : 'text-slate-600 hover:text-slate-800'"
-                class="px-4 py-1.5 text-sm font-medium rounded-full transition"
-            >纯中文</button>
-            <button
-                type="button"
-                @click="mode = 'en'"
-                :class="mode === 'en' ? 'mode-btn-active' : 'text-slate-600 hover:text-slate-800'"
-                class="px-4 py-1.5 text-sm font-medium rounded-full transition"
-            >纯英文</button>
-            <button
-                type="button"
-                @click="mode = 'both'"
-                :class="mode === 'both' ? 'mode-btn-active' : 'text-slate-600 hover:text-slate-800'"
-                class="px-4 py-1.5 text-sm font-medium rounded-full transition"
-            >中英双语</button>
+            <button type="button" @click="switchMode('zh')"  :class="mode === 'zh'  ? 'mode-btn-active' : ''" class="px-4 py-1.5 text-sm font-medium rounded-full transition text-slate-600 hover:text-slate-800">纯中文</button>
+            <button type="button" @click="switchMode('en')"  :class="mode === 'en'  ? 'mode-btn-active' : ''" class="px-4 py-1.5 text-sm font-medium rounded-full transition text-slate-600 hover:text-slate-800">纯英文</button>
+            <button type="button" @click="switchMode('both')" :class="mode === 'both' ? 'mode-btn-active' : ''" class="px-4 py-1.5 text-sm font-medium rounded-full transition text-slate-600 hover:text-slate-800">中英双语</button>
         </div>
     </div>
 
-    <!-- 内容区 -->
-    <div class="bg-white rounded-lg shadow-sm px-8 py-8 space-y-6">
-        {% for p in paragraphs %}
-        <div
-            class="paragraph border-b border-slate-100 pb-6 last:border-b-0"
-            data-pid="{{ p.id }}"
-        >
-            <!-- 章节标题 (在段落之间出现, 仅在双语/中文模式下作为弱提示) -->
-            {# 用 sibling selector 的方式略显复杂, 这里改为在段落前显式渲染章节标题 #}
+    <!-- 章节列表: 每个 <article> 初始只有 header, 段落懒加载 -->
+    {% for ch in chapters %}
+    <article
+        id="chapter-{{ ch.id }}"
+        data-chapter-id="{{ ch.id }}"
+        class="chapter bg-white rounded-lg shadow-sm p-6 sm:p-8 scroll-mt-32"
+    >
+        <header class="mb-4 pb-3 border-b border-slate-100">
+            <h2 class="text-lg font-bold text-slate-800">{{ ch.title }}</h2>
+            <div class="mt-2 flex items-center gap-2 flex-wrap">
+                <span class="status-badge text-xs px-2 py-0.5 rounded-full font-medium bg-slate-100 text-slate-500">加载中…</span>
+                <button
+                    type="button"
+                    class="translate-btn text-xs px-3 py-1 font-medium bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition shadow-sm"
+                    style="display:none"
+                    @click="translateChapter({{ ch.id }})"
+                >翻译本章</button>
+            </div>
+        </header>
 
-            <!--
-                双语 / 中文 模式下的中文 (zh + both)
-                both 模式下与英文一起构成"上中下英"
-            -->
-            <p
-                x-show="mode === 'zh' || mode === 'both'"
-                class="text-slate-800 leading-loose"
-                :class="mode === 'both' ? 'text-base mb-2' : 'text-lg'"
-            >{{ p.original }}</p>
+        <div class="chapter-body space-y-4"></div>
 
-            <!--
-                英文段落 (en + both)
-                - both 模式: 静态,斜体,作为下方的英文
-                - en  模式: 可点击,展开/收起下方中文
-            -->
-            <p
-                x-show="mode === 'en' || mode === 'both'"
-                class="leading-loose transition"
-                :class="mode === 'en'
-                    ? 'text-base text-slate-800 cursor-pointer hover:text-indigo-600 select-none'
-                    : 'text-base text-slate-600 italic'"
-                @click="mode === 'en' && (expandedId = (expandedId === {{ p.id }} ? null : {{ p.id }}))"
+        {% if ch.next_chapter_id %}
+        <div class="mt-6 pt-4 border-t border-slate-100 text-right">
+            <a
+                href="#chapter-{{ ch.next_chapter_id }}"
+                @click="maybeTranslateNext({{ ch.next_chapter_id }})"
+                class="text-sm text-indigo-600 hover:text-indigo-800 inline-flex items-center gap-1"
             >
-                {% if p.translated %}
-                    {{ p.translated }}
-                {% else %}
-                    <span class="text-slate-400 not-italic">⟳ 未翻译</span>
-                {% endif %}
-            </p>
-
-            <!--
-                en 模式下的手风琴: 展开对应中文
-            -->
-            <div
-                x-show="mode === 'en' && expandedId === {{ p.id }}"
-                x-transition:enter="transition ease-out duration-300"
-                x-transition:enter-start="opacity-0 -translate-y-1"
-                x-transition:enter-end="opacity-100 translate-y-0"
-                x-transition:leave="transition ease-in duration-200"
-                x-transition:leave-start="opacity-100 translate-y-0"
-                x-transition:leave-end="opacity-0 -translate-y-1"
-                class="mt-3 pl-4 border-l-2 border-indigo-300 text-sm text-slate-600 leading-loose"
-            >{{ p.original }}</div>
+                <span>下一章</span>
+                <span class="text-base">↓</span>
+            </a>
         </div>
-        {% endfor %}
-
-        {% if not paragraphs %}
-        <p class="text-slate-400 text-center py-10">这本书里没有段落 :(</p>
         {% endif %}
-    </div>
+    </article>
+    {% endfor %}
 
-    <p class="text-center text-xs text-slate-400 pt-2">
-        默认纯中文阅读 · 翻译需手动点击顶部"开始翻译" · 纯英文模式下点击英文段落展开中文
+    <p class="text-center text-xs text-slate-400 pt-2 pb-8">
+        纯英文模式下, 段落懒加载后点击英文段可展开中文 · 切到下一章时若该章未翻译, 会自动预热
     </p>
 </div>
+
+<style>
+    /* 模式切换: 通过 body 上的 .mode-* class 控制段落可见性
+       一次 class 切换 vs N 个段落 x-show 重排 -> 性能差 10x+ */
+    .paragraph-en { display: none; }
+    .paragraph-zh { display: block; }
+    body.mode-en  .paragraph-zh { display: none; }
+    body.mode-en  .paragraph-en { display: block; cursor: pointer; }
+    body.mode-en  .paragraph-en:hover { color: #4f46e5; }
+    body.mode-en  .paragraph[data-expanded="1"] .paragraph-zh { display: block; }
+    body.mode-both .paragraph-en { display: block; font-style: italic; }
+</style>
+
+<!-- Alpine.data() 在 <script> 块内注册 (而不是塞在 x-data 属性里) -->
+<script>
+    function escapeHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    document.addEventListener('alpine:init', () => {
+        const cfg = window.VIBE_READING || {};
+        Alpine.data('reader', () => ({
+            bookId: cfg.bookId,
+            mode: 'zh',
+            chapterMaxChars: cfg.chapterMaxChars,
+            chapterStatus: {},
+            loadedChapters: new Set(),
+            observer: null,
+            _timer: null,
+
+            init() {
+                document.body.classList.add('mode-zh');
+                this.fetchStatus();
+                this.observer = new IntersectionObserver((entries) => {
+                    for (const entry of entries) {
+                        if (entry.isIntersecting) {
+                            const id = parseInt(entry.target.dataset.chapterId, 10);
+                            this.loadChapter(id);
+                        }
+                    }
+                }, { rootMargin: '600px 0px 600px 0px' });
+                document.querySelectorAll('.chapter').forEach((el) => this.observer.observe(el));
+                document.addEventListener('click', (e) => {
+                    if (this.mode !== 'en') return;
+                    const p = e.target.closest('.paragraph');
+                    if (!p) return;
+                    if (e.target.closest('.paragraph-en')) {
+                        p.dataset.expanded = p.dataset.expanded === '1' ? '0' : '1';
+                    }
+                });
+            },
+            destroy() {
+                if (this._timer) clearInterval(this._timer);
+                if (this.observer) this.observer.disconnect();
+            },
+            switchMode(m) {
+                this.mode = m;
+                document.body.classList.remove('mode-zh', 'mode-en', 'mode-both');
+                document.body.classList.add('mode-' + m);
+            },
+            async fetchStatus() {
+                try {
+                    const res = await fetch('/api/chapter-status/' + this.bookId);
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    let hasPending = false;
+                    for (const ch of data.chapters) {
+                        this.chapterStatus[ch.id] = ch;
+                        this.updateBadgeDOM(ch);
+                        if (ch.status === 'pending' || ch.status === 'in_progress' || ch.status === 'partial') {
+                            hasPending = true;
+                        }
+                    }
+                    if (!hasPending && this._timer) {
+                        clearInterval(this._timer);
+                        this._timer = null;
+                    } else if (hasPending && !this._timer) {
+                        this._timer = setInterval(() => this.fetchStatus(), 3000);
+                    }
+                } catch (e) { /* ignore */ }
+            },
+            async loadChapter(id) {
+                if (this.loadedChapters.has(id)) return;
+                this.loadedChapters.add(id);
+                const container = document.querySelector('#chapter-' + id + ' .chapter-body');
+                if (!container) return;
+                container.innerHTML = '<p class="text-slate-400 text-sm py-4">加载中…</p>';
+                try {
+                    const res = await fetch('/api/chapter/' + id);
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    const data = await res.json();
+                    this.renderChapter(container, data);
+                } catch (e) {
+                    container.innerHTML = '<p class="text-red-500 text-sm py-4">加载失败: ' + escapeHtml(e.message) + '</p>';
+                    this.loadedChapters.delete(id);
+                }
+            },
+            renderChapter(container, chapter) {
+                const paras = chapter.paragraphs || [];
+                const parts = paras.map((p) => {
+                    const en = p.translated
+                        ? escapeHtml(p.translated)
+                        : '<span class="text-slate-400 not-italic">⟳ 未翻译</span>';
+                    return '<div class="paragraph border-b border-slate-50 pb-4 last:border-b-0 last:pb-0" data-expanded="0">'
+                        + '<p class="paragraph-zh text-slate-800 leading-loose text-base mb-2">' + escapeHtml(p.original || '') + '</p>'
+                        + '<p class="paragraph-en text-base text-slate-600 italic leading-loose" data-pid="' + p.id + '">' + en + '</p>'
+                        + '</div>';
+                });
+                container.innerHTML = parts.join('') || '<p class="text-slate-400 text-sm py-4">(空章节)</p>';
+                container.dataset.loaded = '1';
+            },
+            canTranslate(chapterId) {
+                if (this.mode === 'zh') return false;
+                const ch = this.chapterStatus[chapterId];
+                if (!ch) return false;
+                if (ch.char_count > this.chapterMaxChars) return false;
+                return ch.status === 'pending' || ch.status === 'failed';
+            },
+            async translateChapter(chapterId) {
+                try {
+                    const res = await fetch('/translate/chapter/' + chapterId, { method: 'POST' });
+                    const data = await res.json().catch(() => ({}));
+                    if (res.ok && (data.status === 'started' || data.status === 'too_long')) {
+                        if (this.chapterStatus[chapterId]) {
+                            this.chapterStatus[chapterId].status = data.status;
+                        } else {
+                            this.chapterStatus[chapterId] = { id: chapterId, status: data.status };
+                        }
+                        this.updateBadgeDOM(this.chapterStatus[chapterId]);
+                    }
+                } catch (e) {
+                    console.error('translateChapter failed:', e);
+                }
+            },
+            maybeTranslateNext(chapterId) {
+                if (chapterId == null) return;
+                if (this.mode === 'zh') return;
+                const ch = this.chapterStatus[chapterId];
+                if (!ch) return;
+                if (ch.char_count > this.chapterMaxChars) return;
+                if (ch.status === 'pending' || ch.status === 'failed' || ch.status === 'partial') {
+                    this.translateChapter(chapterId);
+                }
+            },
+            updateBadgeDOM(ch) {
+                const el = document.querySelector('#chapter-' + ch.id + ' .status-badge');
+                if (!el) return;
+                el.textContent = this.badgeText(ch);
+                el.className = 'status-badge text-xs px-2 py-0.5 rounded-full font-medium ' + this.badgeClass(ch);
+                const btn = document.querySelector('#chapter-' + ch.id + ' .translate-btn');
+                if (btn) btn.style.display = this.canTranslate(ch.id) ? '' : 'none';
+            },
+            badgeText(ch) {
+                if (ch.char_count > this.chapterMaxChars) {
+                    return '本章过长 (' + ch.char_count.toLocaleString() + ' / ' + this.chapterMaxChars.toLocaleString() + ' 字符), 暂不支持翻译';
+                }
+                switch (ch.status) {
+                    case 'pending':     return '未翻译';
+                    case 'in_progress': return '⟳ 翻译中…';
+                    case 'done':        return '✓ 已翻译';
+                    case 'failed':      return '✗ 翻译失败';
+                    case 'partial':     return '部分翻译 (' + ch.translated_count + '/' + ch.paragraph_count + ')';
+                    case 'too_long':    return '本章过长 (' + ch.char_count.toLocaleString() + ' 字符)';
+                    case 'empty':       return '空章节';
+                    default:            return ch.status;
+                }
+            },
+            badgeClass(ch) {
+                if (ch.char_count > this.chapterMaxChars) return 'bg-amber-100 text-amber-700';
+                switch (ch.status) {
+                    case 'done':        return 'bg-emerald-100 text-emerald-700';
+                    case 'in_progress': return 'bg-blue-100 text-blue-700';
+                    case 'failed':      return 'bg-red-100 text-red-700';
+                    case 'partial':     return 'bg-amber-100 text-amber-700';
+                    case 'too_long':    return 'bg-amber-100 text-amber-700';
+                    case 'empty':       return 'bg-slate-100 text-slate-500';
+                    default:            return 'bg-slate-100 text-slate-500';
+                }
+            }
+        }));
+    });
+</script>
 {% endblock %}

@@ -1,5 +1,6 @@
 """数据库连接与会话管理 (SQLite + aiosqlite 异步)。"""
 from pathlib import Path
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -13,6 +14,19 @@ engine = create_async_engine(
     future=True,
     connect_args={"check_same_thread": False},
 )
+
+
+@event.listens_for(engine.sync_engine, "connect")
+def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record):
+    """SQLite 默认关闭外键约束, 这里打开后 cascade='all, delete-orphan' 才能生效。
+
+    同时开启 WAL 模式: 读写并发更友好, 大量 INSERT 速度提升 3-5x。
+    """
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys = ON")
+    cursor.execute("PRAGMA journal_mode = WAL")
+    cursor.close()
+
 
 async_session_maker = async_sessionmaker(
     engine,

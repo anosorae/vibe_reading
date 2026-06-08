@@ -1,192 +1,230 @@
-"""DeepSeek 翻译服务: 滑动窗口上下文 + 并发限流。"""
+"""
+按章翻译服务 (deepseek-v4-flash, 非思考模式)。
+
+设计要点:
+  - 粒度: 一章 = 一次 API 调用, 段数对齐靠空行切分
+  - 上下文: 上一章英译全文 (超 30K 字符则取头尾各半)
+  - 模型: deepseek-v4-flash 非思考模式 (extra_body.thinking.type=disabled)
+  - 超长拒绝: 单章字符 > CHAPTER_MAX_CHARS 直接拒绝, 标记 paragraph.status=3
+  - 客户端: openai.AsyncOpenAI (官方 SDK, OpenAI 兼容格式)
+"""
 from __future__ import annotations
 
-import asyncio
 import os
+import re
 from typing import Optional
 
-import httpx
 from dotenv import load_dotenv
-from sqlalchemy import func, select
+from openai import APIError, AsyncOpenAI
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlalchemy.orm import selectinload
 
 from models import Book, Chapter, Paragraph
 
 load_dotenv()
 
 DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "").strip()
-DEEPSEEK_API_BASE: str = os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com/v1").rstrip("/")
-DEEPSEEK_MODEL: str = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
-MAX_CONCURRENT: int = int(os.getenv("MAX_CONCURRENT_TRANSLATIONS", "3"))
+DEEPSEEK_API_BASE: str = os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com").rstrip("/")
+DEEPSEEK_MODEL: str = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
+CHAPTER_MAX_CHARS: int = int(os.getenv("CHAPTER_MAX_CHARS", "20000"))
+PREV_CHAPTER_MAX_CHARS: int = 30000  # 上一章英译塞入 prompt 的字符上限
+
+# Paragraph.status 含义 (在 models.Paragraph 同一定义):
+#   0 = pending, 1 = in_progress, 2 = done, -1 = failed, 3 = too_long
+STATUS_TOO_LONG = 3
 
 
 SYSTEM_PROMPT = """你是一位资深中英双语文学翻译。
-- 翻译必须自然流畅、地道, 保留原文语气、风格和文学性。
-- 用户会提供前两段中文原文作为【语境参考】, 请勿翻译, 也不要重复输出。
-- 只输出【当前段落】对应的英文译文, 不要输出任何解释、注释、标题或额外内容。"""
+- 将用户给定的整章中文翻译为英文, 保留原文语气、风格、文学性。
+- 保持与原文相同的段落数, 段与段之间用一个空行分隔。
+- 只输出 N 段英文译文, 段间空行分隔, 严禁任何解释、标题、注释或额外内容。"""
 
 
-def _build_user_prompt(current_text: str, context_chinese: list[str]) -> str:
-    """构造带滑动窗口上下文的 Prompt。"""
-    if context_chinese:
-        ctx = "\n".join(f"[{i + 1}] {c}" for i, c in enumerate(context_chinese))
-        return (
-            "以下为前两段中文原文(仅作语境参考, 请勿翻译):\n"
-            f"{ctx}\n\n"
-            "---\n\n"
-            "请翻译当前段落:\n"
-            f"{current_text}\n\n"
-            "要求: 只输出当前段落的英文译文, 不要重复前文, 不要添加任何解释。"
+def _build_user_prompt(
+    chapter_title: str,
+    chapter_zh: str,
+    prev_chapter_english: Optional[str],
+) -> str:
+    parts: list[str] = []
+    if prev_chapter_english:
+        parts.append("上一章英译 (供术语 / 风格衔接参考):")
+        parts.append(prev_chapter_english)
+        parts.append("\n---\n")
+    parts.append(f"Chapter: {chapter_title}\n请翻译以下段落:")
+    parts.append(chapter_zh)
+    return "\n".join(parts)
+
+
+def _truncate_middle(text: str, limit: int) -> str:
+    """字符超限时, 取头尾各一半, 中间用占位符连接。"""
+    if len(text) <= limit:
+        return text
+    half = limit // 2
+    return f"{text[:half]}\n\n[... middle truncated ...]\n\n{text[-half:]}"
+
+
+def _parse_translated_paragraphs(response_text: str, expected_n: int) -> list[str]:
+    """按空行切分 LLM 响应, 段数对齐到 expected_n (不足补空, 多余截断)。"""
+    chunks = re.split(r"\n\s*\n", response_text or "")
+    chunks = [c.strip() for c in chunks if c.strip()]
+    if len(chunks) != expected_n:
+        print(
+            f"[translator] chapter paragraph count mismatch: "
+            f"expected {expected_n}, got {len(chunks)} -> 补/截到 {expected_n}"
         )
-    return (
-        "请将以下中文翻译为英文:\n"
-        f"{current_text}\n\n"
-        "要求: 只输出英文译文, 不要添加任何解释。"
-    )
-
-
-async def _translate_one(
-    client: httpx.AsyncClient,
-    text: str,
-    context_chinese: list[str],
-    semaphore: asyncio.Semaphore,
-) -> Optional[str]:
-    """单段落翻译, 自动限流。"""
-    if not DEEPSEEK_API_KEY:
-        return None
-
-    async with semaphore:
-        payload = {
-            "model": DEEPSEEK_MODEL,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": _build_user_prompt(text, context_chinese)},
-            ],
-            "temperature": 0.3,
-            "max_tokens": 2000,
-            "stream": False,
-        }
-        headers = {
-            "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-            "Content-Type": "application/json",
-        }
-        try:
-            resp = await client.post(
-                f"{DEEPSEEK_API_BASE}/chat/completions",
-                json=payload,
-                headers=headers,
-                timeout=httpx.Timeout(60.0, connect=10.0),
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return (data["choices"][0]["message"]["content"] or "").strip() or None
-        except Exception as exc:  # noqa: BLE001
-            print(f"[translator] translate error: {exc!r}")
-            return None
-
-
-async def _refresh_progress(session: AsyncSession, book_id: int) -> None:
-    """刷新 Book.translated_count。"""
-    stmt = (
-        select(func.count(Paragraph.id))
-        .join(Chapter, Paragraph.chapter_id == Chapter.id)
-        .where(Chapter.book_id == book_id, Paragraph.status == 2)
-    )
-    result = await session.execute(stmt)
-    done = result.scalar() or 0
-
-    book = await session.get(Book, book_id)
-    if book is not None:
-        book.translated_count = done
-        await session.commit()
-
-
-async def _process_one(
-    client: httpx.AsyncClient,
-    session_maker: async_sessionmaker[AsyncSession],
-    book_id: int,
-    para_id: int,
-    text: str,
-    context_chinese: list[str],
-    semaphore: asyncio.Semaphore,
-) -> None:
-    """翻译一段并写回 DB, 然后刷新进度。"""
-    # 标记为"翻译中"
-    async with session_maker() as s:
-        p = await s.get(Paragraph, para_id)
-        if p is None:
-            return
-        p.status = 1
-        await s.commit()
-
-    translated = await _translate_one(client, text, context_chinese, semaphore)
-
-    async with session_maker() as s:
-        p = await s.get(Paragraph, para_id)
-        if p is None:
-            return
-        if translated:
-            p.translated_text = translated
-            p.status = 2
+        if len(chunks) < expected_n:
+            chunks.extend([""] * (expected_n - len(chunks)))
         else:
-            p.status = -1  # 失败
+            chunks = chunks[:expected_n]
+    return chunks
+
+
+async def _load_prev_chapter_english(
+    session: AsyncSession,
+    book_id: int,
+    chapter_index: int,
+) -> Optional[str]:
+    """加载上一章所有段落的英译, 拼成单字符串, 过长截断。"""
+    if chapter_index <= 0:
+        return None
+    stmt = (
+        select(Chapter)
+        .where(Chapter.book_id == book_id, Chapter.chapter_index == chapter_index - 1)
+        .options(selectinload(Chapter.paragraphs))
+    )
+    prev = (await session.execute(stmt)).scalar_one_or_none()
+    if prev is None:
+        return None
+    paragraphs = sorted(prev.paragraphs, key=lambda p: p.paragraph_index)
+    text = "\n\n".join(p.translated_text for p in paragraphs if p.translated_text)
+    if not text:
+        return None
+    return _truncate_middle(text, PREV_CHAPTER_MAX_CHARS)
+
+
+async def translate_chapter(
+    chapter_id: int,
+    session_maker: async_sessionmaker[AsyncSession],
+) -> dict:
+    """
+    翻译指定章节。返回:
+      {"status": "done"}
+      {"status": "too_long", "char_count": N}
+      {"status": "failed", "reason": "..."}
+      {"status": "skipped", "reason": "DEEPSEEK_API_KEY not configured"}
+    """
+    # 1) 加载章节
+    async with session_maker() as s:
+        chapter = await s.get(Chapter, chapter_id, options=[selectinload(Chapter.paragraphs)])
+        if chapter is None:
+            return {"status": "failed", "reason": "chapter not found"}
+        paragraphs = sorted(chapter.paragraphs, key=lambda p: p.paragraph_index)
+        if not paragraphs:
+            return {"status": "skipped", "reason": "empty chapter"}
+        book_id = chapter.book_id
+        chapter_index = chapter.chapter_index
+        chapter_title = chapter.title
+
+    # 2) 超长拒绝 (无兜底)
+    char_count = sum(len(p.original_text or "") for p in paragraphs)
+    if char_count > CHAPTER_MAX_CHARS:
+        print(
+            f"[translator] chapter {chapter_id} 过长: {char_count} chars > "
+            f"{CHAPTER_MAX_CHARS}, 拒绝翻译"
+        )
+        async with session_maker() as s:
+            for p in paragraphs:
+                p.status = STATUS_TOO_LONG
+            await s.commit()
+        return {"status": "too_long", "char_count": char_count}
+
+    if not DEEPSEEK_API_KEY:
+        return {"status": "skipped", "reason": "DEEPSEEK_API_KEY 未配置"}
+
+    # 3) 标记为翻译中
+    async with session_maker() as s:
+        for p in paragraphs:
+            p.status = 1
         await s.commit()
 
+    # 4) 加载上一章英译 (上下文)
     async with session_maker() as s:
-        await _refresh_progress(s, book_id)
+        prev_english = await _load_prev_chapter_english(s, book_id, chapter_index)
 
+    # 5) 构造 prompt
+    chapter_zh = "\n\n".join(p.original_text for p in paragraphs)
+    user_prompt = _build_user_prompt(
+        chapter_title=chapter_title,
+        chapter_zh=chapter_zh,
+        prev_chapter_english=prev_english,
+    )
 
-async def translate_book_background(
-    book_id: int,
-    session_maker: async_sessionmaker[AsyncSession],
-) -> None:
-    """
-    后台任务入口: 顺序构建上下文, 并发执行 API 调用 (受 Semaphore 限流)。
-    """
-    if not DEEPSEEK_API_KEY:
-        print(f"[translator] book {book_id}: DEEPSEEK_API_KEY 未配置, 跳过翻译。")
-        return
-
-    # 1) 拉取全部段落 (按章节顺序、段内顺序)
-    async with session_maker() as s:
-        stmt = (
-            select(Paragraph)
-            .join(Chapter, Paragraph.chapter_id == Chapter.id)
-            .where(Chapter.book_id == book_id)
-            .order_by(Chapter.chapter_index, Paragraph.paragraph_index)
+    # 6) 调用 DeepSeek (OpenAI 兼容格式, 非思考模式)
+    try:
+        client = AsyncOpenAI(
+            api_key=DEEPSEEK_API_KEY,
+            base_url=DEEPSEEK_API_BASE,
+            timeout=120.0,
         )
-        rows = (await s.execute(stmt)).scalars().all()
+        response = await client.chat.completions.create(
+            model=DEEPSEEK_MODEL,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.3,
+            max_tokens=8000,
+            extra_body={"thinking": {"type": "disabled"}},
+        )
+        translated_text = (response.choices[0].message.content or "").strip()
+    except APIError as exc:
+        print(f"[translator] chapter {chapter_id} API error: {exc!r}")
+        async with session_maker() as s:
+            for p in paragraphs:
+                p.status = -1
+            await s.commit()
+        return {"status": "failed", "reason": f"API error: {exc!r}"}
+    except Exception as exc:  # noqa: BLE001
+        print(f"[translator] chapter {chapter_id} unexpected error: {exc!r}")
+        async with session_maker() as s:
+            for p in paragraphs:
+                p.status = -1
+            await s.commit()
+        return {"status": "failed", "reason": f"unexpected: {exc!r}"}
 
-    # 2) 过滤: 只翻译有内容且尚未翻译的
-    todo: list[Paragraph] = [
-        p for p in rows if (p.original_text or "").strip() and not p.translated_text
-    ]
-    if not todo:
-        return
+    if not translated_text:
+        async with session_maker() as s:
+            for p in paragraphs:
+                p.status = -1
+            await s.commit()
+        return {"status": "failed", "reason": "empty response"}
 
-    semaphore = asyncio.Semaphore(MAX_CONCURRENT)
-    async with httpx.AsyncClient() as client:
-        tasks = []
-        for i, p in enumerate(todo):
-            # 滑动窗口: N-1 与 N-2 段的中文作为 Context
-            context: list[str] = []
-            if i >= 1:
-                context.append(todo[i - 1].original_text)
-            if i >= 2:
-                context.append(todo[i - 2].original_text)
-            tasks.append(
-                _process_one(
-                    client=client,
-                    session_maker=session_maker,
-                    book_id=book_id,
-                    para_id=p.id,
-                    text=p.original_text,
-                    context_chinese=context,
-                    semaphore=semaphore,
-                )
-            )
-        # 并发执行, 单段失败不影响其他段
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        for r in results:
-            if isinstance(r, Exception):
-                print(f"[translator] task error: {r!r}")
+    # 7) 解析响应
+    translated_paragraphs = _parse_translated_paragraphs(translated_text, len(paragraphs))
+
+    # 8) 写回 DB
+    async with session_maker() as s:
+        for i, p in enumerate(paragraphs):
+            text = translated_paragraphs[i]
+            p.translated_text = text
+            p.status = 2 if text else -1
+        # 顺便刷新 Book.translated_count (保留该字段, 用于历史兼容)
+        stmt = (
+            select(Chapter)
+            .where(Chapter.book_id == book_id)
+            .options(selectinload(Chapter.paragraphs))
+        )
+        chapters = (await s.execute(stmt)).scalars().all()
+        total_done = sum(
+            1
+            for ch in chapters
+            for p in ch.paragraphs
+            if p.status == 2
+        )
+        book = await s.get(Book, book_id)
+        if book is not None:
+            book.translated_count = total_done
+        await s.commit()
+
+    return {"status": "done"}

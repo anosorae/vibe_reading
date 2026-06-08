@@ -6,7 +6,7 @@
 <div class="bg-white rounded-lg shadow-sm p-6 mb-6">
     <h2 class="text-lg font-semibold mb-1">上传 TXT 电子书</h2>
     <p class="text-xs text-slate-500 mb-4">
-        上传后会自动识别章节, 并由 DeepSeek 在后台逐段翻译。可随时刷新页面查看进度。
+        上传后会自动识别章节, 出现在下方书架。点「阅读」进入后, 切到「英文/双语」, 点「翻译本章」逐章翻译。
     </p>
     <form
         action="/upload"
@@ -30,10 +30,41 @@
             type="submit"
             class="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-full hover:bg-indigo-700 transition"
         >
-            上传并开始翻译
+            上传
         </button>
     </form>
 </div>
+
+<!-- 上传成功闪条: upload 重定向到 /?uploaded={id} 时显示, 3 秒后自动消失 -->
+{% if flash %}
+<div
+    id="upload-flash"
+    class="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg px-4 py-3 mb-4 flex items-center justify-between"
+>
+    <div class="text-sm">
+        ✓ 已上传 <span class="font-semibold">{{ flash.title }}</span>
+    </div>
+    <a
+        href="/read/{{ flash.id }}"
+        class="text-xs px-3 py-1 bg-emerald-600 text-white rounded-full hover:bg-emerald-700 transition"
+    >📖 立即阅读</a>
+</div>
+<script>
+    setTimeout(() => {
+        const el = document.getElementById('upload-flash');
+        if (el) {
+            el.style.transition = 'opacity 0.5s';
+            el.style.opacity = '0';
+            setTimeout(() => el.remove(), 500);
+        }
+        // 顺便清掉 URL 上的 ?uploaded=... query, 刷新保持干净
+        if (window.history && window.history.replaceState) {
+            const url = window.location.pathname;
+            window.history.replaceState({}, '', url);
+        }
+    }, 3000);
+</script>
+{% endif %}
 
 <!-- 书架 -->
 <div class="bg-white rounded-lg shadow-sm p-6">
