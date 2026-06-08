@@ -1,15 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ book.title }} - Vibe Reading{% endblock %}
+{% block nav %}{% endblock %}
 
 {% block content %}
-<!--
-    Design:
-    - Catalog dropdown at top for TOC navigation
-    - Single chapter view, content loaded on navigation
-    - Modes via body class (unchanged)
-    - Status polling updates both catalog dots and active chapter badge
--->
-
 <script>
     window.VIBE_READING = {
         bookId: {{ book.id }},
@@ -18,74 +11,84 @@
     };
 </script>
 
-<div x-data="reader" class="space-y-6">
-    <!-- Top bar -->
-    <div class="bg-white rounded-lg shadow-sm p-6 sticky top-0 z-10 backdrop-blur bg-white/90">
-        <div class="flex items-center justify-between mb-4 gap-4">
-            <div class="min-w-0">
-                <a href="/" class="text-xs text-slate-500 hover:text-indigo-600">← 返回书架</a>
-                <h1 class="text-2xl font-bold text-slate-800 mt-1 truncate">{{ book.title }}</h1>
+<div x-data="reader">
+    <!-- 顶部工具栏 -->
+    <div class="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-slate-100">
+        <div class="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+            <div class="min-w-0 flex items-center gap-3">
+                <a href="/" class="text-slate-400 hover:text-indigo-600 transition shrink-0" title="返回书架">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                </a>
+                <h1 class="text-sm font-medium text-slate-700 truncate">{{ book.title }}</h1>
             </div>
-            <!-- Catalog dropdown -->
-            <div class="relative" x-data="{ open: false }">
-                <button @click="open = !open"
-                        class="flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg bg-slate-100 hover:bg-slate-200 transition shrink-0">
-                    <span>📖 目录</span>
-                    <span :class="open ? 'rotate-180' : ''" class="transition">▼</span>
+            <div class="flex items-center gap-1 shrink-0">
+                <button type="button" @click="switchMode('zh')"  :class="mode === 'zh'  ? 'text-indigo-600 bg-indigo-50' : 'text-slate-500 hover:text-slate-700'" class="px-2.5 py-1 text-xs font-medium rounded-md transition">中文</button>
+                <button type="button" @click="switchMode('en')"  :class="mode === 'en'  ? 'text-indigo-600 bg-indigo-50' : 'text-slate-500 hover:text-slate-700'" class="px-2.5 py-1 text-xs font-medium rounded-md transition">英文</button>
+                <button type="button" @click="switchMode('both')" :class="mode === 'both' ? 'text-indigo-600 bg-indigo-50' : 'text-slate-500 hover:text-slate-700'" class="px-2.5 py-1 text-xs font-medium rounded-md transition">双语</button>
+                <div class="w-px h-4 bg-slate-200 mx-1"></div>
+                <button type="button" @click="catalogOpen = true" class="px-2.5 py-1 text-xs font-medium text-slate-500 hover:text-indigo-600 rounded-md transition flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                    目录
                 </button>
-                <div x-show="open" @click.away="open = false" x-transition
-                     class="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-slate-200 max-h-96 overflow-y-auto z-50">
-                    <div class="py-1">
-                        <template x-for="ch in chapters" :key="ch.id">
-                            <a href="#"
-                               @click.prevent="navigateTo(ch.id); open = false"
-                               :class="activeChapterId === ch.id ? 'bg-indigo-50 text-indigo-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'"
-                               class="block px-4 py-2 text-sm flex items-center justify-between">
-                                <span x-text="ch.title"></span>
-                                <span :id="'cat-dot-' + ch.id" class="w-2 h-2 rounded-full flex-shrink-0"></span>
-                            </a>
-                        </template>
-                    </div>
-                </div>
             </div>
-        </div>
-
-        <div class="inline-flex bg-slate-100 rounded-full p-1 gap-1">
-            <button type="button" @click="switchMode('zh')"  :class="mode === 'zh'  ? 'mode-btn-active' : ''" class="px-4 py-1.5 text-sm font-medium rounded-full transition text-slate-600 hover:text-slate-800">纯中文</button>
-            <button type="button" @click="switchMode('en')"  :class="mode === 'en'  ? 'mode-btn-active' : ''" class="px-4 py-1.5 text-sm font-medium rounded-full transition text-slate-600 hover:text-slate-800">纯英文</button>
-            <button type="button" @click="switchMode('both')" :class="mode === 'both' ? 'mode-btn-active' : ''" class="px-4 py-1.5 text-sm font-medium rounded-full transition text-slate-600 hover:text-slate-800">中英双语</button>
         </div>
     </div>
 
-    <!-- Active chapter view -->
-    <article class="bg-white rounded-lg shadow-sm p-6 sm:p-8">
-        <header class="mb-4 pb-3 border-b border-slate-100">
-            <h2 class="text-lg font-bold text-slate-800" x-text="currentTitle"></h2>
-            <div class="mt-2 flex items-center gap-2 flex-wrap">
-                <span id="active-status-badge" class="status-badge text-xs px-2 py-0.5 rounded-full font-medium bg-slate-100 text-slate-500">加载中…</span>
-                <button id="active-translate-btn" type="button"
-                        class="translate-btn text-xs px-3 py-1 font-medium bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition shadow-sm"
-                        style="display:none"
-                        @click="translateChapter(activeChapterId)">翻译本章</button>
+    <!-- 目录弹窗 (居中全屏) -->
+    <div x-show="catalogOpen" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+         class="fixed inset-0 z-50 flex items-center justify-center p-4" style="display:none">
+        <div class="absolute inset-0 bg-black/40" @click="catalogOpen = false"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col"
+             x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                <h2 class="text-base font-semibold text-slate-800">目录</h2>
+                <button @click="catalogOpen = false" class="text-slate-400 hover:text-slate-600 transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
             </div>
-        </header>
-        <div id="chapter-body" class="space-y-4"></div>
-
-        <div class="mt-6 pt-4 border-t border-slate-100 flex justify-between">
-            <a href="#" @click.prevent="prevChapter" x-show="hasPrev"
-               class="text-sm text-indigo-600 hover:text-indigo-800 inline-flex items-center gap-1">
-                <span class="text-base">↑</span> <span>上一章</span>
-            </a>
-            <a href="#" @click.prevent="nextChapter" x-show="hasNext"
-               class="text-sm text-indigo-600 hover:text-indigo-800 inline-flex items-center gap-1">
-                <span>下一章</span> <span class="text-base">↓</span>
-            </a>
+            <div class="flex-1 overflow-y-auto overscroll-contain py-2">
+                <template x-for="ch in chapters" :key="ch.id">
+                    <button @click="navigateTo(ch.id); catalogOpen = false"
+                            :class="activeChapterId === ch.id ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'"
+                            class="w-full text-left px-6 py-3 flex items-center gap-3 transition">
+                        <span :id="'cat-dot-' + ch.id" class="w-2 h-2 rounded-full flex-shrink-0"></span>
+                        <span class="text-sm truncate" x-text="ch.title"></span>
+                    </button>
+                </template>
+            </div>
         </div>
-    </article>
+    </div>
 
-    <p class="text-center text-xs text-slate-400 pt-2 pb-8">
-        纯英文模式下, 段落加载后点击英文段可展开中文 · 在「英文/双语」模式通过目录或下一章跳转时可自动预热翻译
-    </p>
+    <!-- 章节内容 -->
+    <div class="max-w-3xl mx-auto px-4 py-6">
+        <article class="bg-white rounded-xl shadow-sm border border-slate-100">
+            <header class="px-6 pt-6 pb-4 border-b border-slate-50">
+                <h2 class="text-xl font-bold text-slate-800 leading-snug" x-text="currentTitle"></h2>
+                <div class="mt-3 flex items-center gap-2 flex-wrap">
+                    <span id="active-status-badge" class="text-xs px-2 py-0.5 rounded-full font-medium bg-slate-100 text-slate-500">加载中…</span>
+                    <button id="active-translate-btn" type="button"
+                            class="text-xs px-3 py-1 font-medium bg-indigo-600 text-white rounded-full hover:bg-indigo-700 transition shadow-sm"
+                            style="display:none"
+                            @click="translateChapter(activeChapterId)">翻译本章</button>
+                </div>
+            </header>
+
+            <div id="chapter-body" class="px-6 py-6 space-y-4"></div>
+
+            <footer class="px-6 py-4 border-t border-slate-50 flex items-center justify-between">
+                <a href="#" @click.prevent="prevChapter" x-show="hasPrev"
+                   class="text-sm text-slate-500 hover:text-indigo-600 transition inline-flex items-center gap-1.5 max-w-[45%]">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                    <span class="truncate" x-text="prevTitle"></span>
+                </a>
+                <a href="#" @click.prevent="nextChapter" x-show="hasNext"
+                   class="text-sm text-slate-500 hover:text-indigo-600 transition inline-flex items-center gap-1.5 max-w-[45%]">
+                    <span class="truncate" x-text="nextTitle"></span>
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                </a>
+            </footer>
+        </article>
+    </div>
 </div>
 
 <style>
@@ -95,7 +98,8 @@
     body.mode-en  .paragraph-en { display: block; cursor: pointer; }
     body.mode-en  .paragraph-en:hover { color: #4f46e5; }
     body.mode-en  .paragraph[data-expanded="1"] .paragraph-zh { display: block; }
-    body.mode-both .paragraph-en { display: block; font-style: italic; }
+    body.mode-both .paragraph-en { display: block; font-style: italic; color: #64748b; }
+    body.mode-both .paragraph-zh { margin-bottom: 0.25rem; }
 </style>
 
 <script>
@@ -118,6 +122,7 @@
             chapterStatus: {},
             chapterMap: {},
             activeChapterId: null,
+            catalogOpen: false,
             _timer: null,
 
             get hasPrev() {
@@ -131,6 +136,18 @@
             get currentTitle() {
                 const ch = this.chapterMap[this.activeChapterId];
                 return ch ? ch.title : '';
+            },
+            get prevTitle() {
+                const ch = this.chapterMap[this.activeChapterId];
+                if (!ch || !ch.prev_chapter_id) return '';
+                const prev = this.chapterMap[ch.prev_chapter_id];
+                return prev ? prev.title : '';
+            },
+            get nextTitle() {
+                const ch = this.chapterMap[this.activeChapterId];
+                if (!ch || !ch.next_chapter_id) return '';
+                const next = this.chapterMap[ch.next_chapter_id];
+                return next ? next.title : '';
             },
 
             init() {
@@ -178,14 +195,14 @@
             async loadChapter(id) {
                 const container = document.getElementById('chapter-body');
                 if (!container) return;
-                container.innerHTML = '<p class="text-slate-400 text-sm py-4">加载中…</p>';
+                container.innerHTML = '<p class="text-slate-400 text-sm py-8 text-center">加载中…</p>';
                 try {
                     const res = await fetch('/api/chapter/' + id);
                     if (!res.ok) throw new Error('HTTP ' + res.status);
                     const data = await res.json();
                     this.renderChapter(container, data);
                 } catch (e) {
-                    container.innerHTML = '<p class="text-red-500 text-sm py-4">加载失败: ' + escapeHtml(e.message) + '</p>';
+                    container.innerHTML = '<p class="text-red-400 text-sm py-8 text-center">加载失败: ' + escapeHtml(e.message) + '</p>';
                 }
             },
             renderChapter(container, chapter) {
@@ -193,13 +210,13 @@
                 const parts = paras.map((p) => {
                     const en = p.translated
                         ? escapeHtml(p.translated)
-                        : '<span class="text-slate-400 not-italic">⟳ 未翻译</span>';
-                    return '<div class="paragraph border-b border-slate-50 pb-4 last:border-b-0 last:pb-0" data-expanded="0">'
-                        + '<p class="paragraph-zh text-slate-800 leading-loose text-base mb-2">' + escapeHtml(p.original || '') + '</p>'
-                        + '<p class="paragraph-en text-base text-slate-600 italic leading-loose" data-pid="' + p.id + '">' + en + '</p>'
+                        : '<span class="text-slate-300 not-italic text-sm">未翻译</span>';
+                    return '<div class="paragraph" data-expanded="0">'
+                        + '<p class="paragraph-zh text-slate-800 leading-[1.9] text-base">' + escapeHtml(p.original || '') + '</p>'
+                        + '<p class="paragraph-en text-base text-slate-500 italic leading-[1.9]" data-pid="' + p.id + '">' + en + '</p>'
                         + '</div>';
                 });
-                container.innerHTML = parts.join('') || '<p class="text-slate-400 text-sm py-4">(空章节)</p>';
+                container.innerHTML = parts.join('') || '<p class="text-slate-400 text-sm py-8 text-center">(空章节)</p>';
                 container.dataset.loaded = '1';
             },
             canTranslate(chapterId) {
@@ -275,7 +292,7 @@
                 const btn = document.getElementById('active-translate-btn');
                 if (badge) {
                     badge.textContent = this.badgeText(ch);
-                    badge.className = 'status-badge text-xs px-2 py-0.5 rounded-full font-medium ' + this.badgeClass(ch);
+                    badge.className = 'text-xs px-2 py-0.5 rounded-full font-medium ' + this.badgeClass(ch);
                 }
                 if (btn) {
                     btn.style.display = this.canTranslate(this.activeChapterId) ? '' : 'none';
@@ -295,13 +312,13 @@
             },
             badgeText(ch) {
                 if (ch.char_count > this.chapterMaxChars) {
-                    return '本章过长 (' + ch.char_count.toLocaleString() + ' / ' + this.chapterMaxChars.toLocaleString() + ' 字符), 暂不支持翻译';
+                    return '本章过长 (' + ch.char_count.toLocaleString() + ' / ' + this.chapterMaxChars.toLocaleString() + ' 字符)';
                 }
                 switch (ch.status) {
                     case 'pending':     return '未翻译';
-                    case 'in_progress': return '⟳ 翻译中…';
-                    case 'done':        return '✓ 已翻译';
-                    case 'failed':      return '✗ 翻译失败';
+                    case 'in_progress': return '翻译中…';
+                    case 'done':        return '已翻译';
+                    case 'failed':      return '翻译失败';
                     case 'partial':     return '部分翻译 (' + ch.translated_count + '/' + ch.paragraph_count + ')';
                     case 'too_long':    return '本章过长 (' + ch.char_count.toLocaleString() + ' 字符)';
                     case 'empty':       return '空章节';
@@ -309,15 +326,15 @@
                 }
             },
             badgeClass(ch) {
-                if (ch.char_count > this.chapterMaxChars) return 'bg-amber-100 text-amber-700';
+                if (ch.char_count > this.chapterMaxChars) return 'bg-amber-50 text-amber-600';
                 switch (ch.status) {
-                    case 'done':        return 'bg-emerald-100 text-emerald-700';
-                    case 'in_progress': return 'bg-blue-100 text-blue-700';
-                    case 'failed':      return 'bg-red-100 text-red-700';
-                    case 'partial':     return 'bg-amber-100 text-amber-700';
-                    case 'too_long':    return 'bg-amber-100 text-amber-700';
-                    case 'empty':       return 'bg-slate-100 text-slate-500';
-                    default:            return 'bg-slate-100 text-slate-500';
+                    case 'done':        return 'bg-emerald-50 text-emerald-600';
+                    case 'in_progress': return 'bg-blue-50 text-blue-600';
+                    case 'failed':      return 'bg-red-50 text-red-600';
+                    case 'partial':     return 'bg-amber-50 text-amber-600';
+                    case 'too_long':    return 'bg-amber-50 text-amber-600';
+                    case 'empty':       return 'bg-slate-50 text-slate-400';
+                    default:            return 'bg-slate-50 text-slate-400';
                 }
             }
         }));
