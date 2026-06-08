@@ -116,24 +116,26 @@
             chapterMaxChars: cfg.chapterMaxChars,
             chapters: cfg.chapters || [],
             chapterStatus: {},
+            chapterMap: {},
             activeChapterId: null,
             _timer: null,
 
             get hasPrev() {
-                const ch = this.chapters.find(c => c.id === this.activeChapterId);
+                const ch = this.chapterMap[this.activeChapterId];
                 return ch && ch.prev_chapter_id != null;
             },
             get hasNext() {
-                const ch = this.chapters.find(c => c.id === this.activeChapterId);
+                const ch = this.chapterMap[this.activeChapterId];
                 return ch && ch.next_chapter_id != null;
             },
             get currentTitle() {
-                const ch = this.chapters.find(c => c.id === this.activeChapterId);
+                const ch = this.chapterMap[this.activeChapterId];
                 return ch ? ch.title : '';
             },
 
             init() {
                 document.body.classList.add('mode-zh');
+                this.chapterMap = Object.fromEntries(this.chapters.map(c => [c.id, c]));
                 this.fetchStatus();
                 if (this.chapters.length > 0) {
                     this.navigateTo(this.chapters[0].id);
@@ -161,13 +163,13 @@
                 this.updateActiveBadge();
             },
             prevChapter() {
-                const ch = this.chapters.find(c => c.id === this.activeChapterId);
+                const ch = this.chapterMap[this.activeChapterId];
                 if (ch && ch.prev_chapter_id != null) {
                     this.navigateTo(ch.prev_chapter_id);
                 }
             },
             nextChapter() {
-                const ch = this.chapters.find(c => c.id === this.activeChapterId);
+                const ch = this.chapterMap[this.activeChapterId];
                 if (ch && ch.next_chapter_id != null) {
                     this.navigateTo(ch.next_chapter_id);
                     this.maybeTranslateNext(ch.next_chapter_id);
@@ -240,8 +242,11 @@
                     const data = await res.json();
                     let hasPending = false;
                     for (const ch of data.chapters) {
+                        const prev = this.chapterStatus[ch.id];
                         this.chapterStatus[ch.id] = ch;
-                        this.updateBadge(ch);
+                        if (!prev || prev.status !== ch.status || prev.translated_count !== ch.translated_count) {
+                            this.updateBadge(ch);
+                        }
                         if (ch.status === 'pending' || ch.status === 'in_progress' || ch.status === 'partial') {
                             hasPending = true;
                         }
@@ -280,7 +285,7 @@
                 if (ch.char_count > this.chapterMaxChars) return 'bg-amber-400';
                 switch (ch.status) {
                     case 'done':        return 'bg-emerald-400';
-                    case 'in_progress': return 'bg-blue-400 animate-pulse';
+                    case 'in_progress': return 'bg-blue-400';
                     case 'failed':      return 'bg-red-400';
                     case 'partial':     return 'bg-amber-400';
                     case 'too_long':    return 'bg-amber-400';
