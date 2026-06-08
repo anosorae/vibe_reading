@@ -41,21 +41,23 @@ STATUS_TOO_LONG = 3
 
 SYSTEM_PROMPT = """你是一位资深中英双语文学翻译。
 - 将用户给定的整章中文翻译为英文, 保留原文语气、风格、文学性。
-- 保持与原文相同的段落数, 段与段之间用一个空行分隔。
-- 只输出 N 段英文译文, 段间空行分隔, 严禁任何解释、标题、注释或额外内容。"""
+- 保持与原文完全相同的段落数, 段与段之间用一个空行分隔。
+- 只输出英文译文, 段间空行分隔, 严禁任何解释、标题、注释或额外内容。"""
 
 
 def _build_user_prompt(
     chapter_title: str,
     chapter_zh: str,
     prev_chapter_english: Optional[str],
+    paragraph_count: int,
 ) -> str:
     parts: list[str] = []
     if prev_chapter_english:
         parts.append("上一章英译 (供术语 / 风格衔接参考):")
         parts.append(prev_chapter_english)
         parts.append("\n---\n")
-    parts.append(f"Chapter: {chapter_title}\n请翻译以下段落:")
+    parts.append(f"Chapter: {chapter_title}")
+    parts.append(f"请翻译以下 {paragraph_count} 个段落, 输出恰好 {paragraph_count} 段英文译文, 段间用空行分隔:")
     parts.append(chapter_zh)
     return "\n".join(parts)
 
@@ -162,6 +164,7 @@ async def translate_chapter(
         chapter_title=chapter_title,
         chapter_zh=chapter_zh,
         prev_chapter_english=prev_english,
+        paragraph_count=len(paragraphs),
     )
 
     # 6) 调用 LLM (OpenAI 兼容格式)

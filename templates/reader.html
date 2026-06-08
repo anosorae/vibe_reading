@@ -260,6 +260,7 @@
                 const ch = this.chapterStatus[chapterId];
                 if (!ch) return;
                 if (ch.char_count > this.chapterMaxChars) return;
+                if (ch.status === 'in_progress' || ch.status === 'done') return;
                 if (ch.status === 'pending' || ch.status === 'failed' || ch.status === 'partial') {
                     this.translateChapter(chapterId);
                 }
