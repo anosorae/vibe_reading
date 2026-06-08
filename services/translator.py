@@ -16,7 +16,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from openai import APIError, AsyncOpenAI
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -140,8 +140,9 @@ async def translate_chapter(
             f"{CHAPTER_MAX_CHARS}, 拒绝翻译"
         )
         async with session_maker() as s:
-            for p in paragraphs:
-                p.status = STATUS_TOO_LONG
+            await s.execute(
+                update(Paragraph).where(Paragraph.chapter_id == chapter_id).values(status=STATUS_TOO_LONG)
+            )
             await s.commit()
         return {"status": "too_long", "char_count": char_count}
 
@@ -150,7 +151,9 @@ async def translate_chapter(
 
     # 3) 标记为翻译中
     async with session_maker() as s:
-        for p in paragraphs:
+        stmt = select(Paragraph).where(Paragraph.chapter_id == chapter_id)
+        db_paras = list((await s.execute(stmt)).scalars().all())
+        for p in db_paras:
             p.status = 1
         await s.commit()
 
@@ -190,22 +193,25 @@ async def translate_chapter(
     except APIError as exc:
         print(f"[translator] chapter {chapter_id} API error: {exc!r}")
         async with session_maker() as s:
-            for p in paragraphs:
-                p.status = -1
+            await s.execute(
+                update(Paragraph).where(Paragraph.chapter_id == chapter_id).values(status=-1)
+            )
             await s.commit()
         return {"status": "failed", "reason": f"API error: {exc!r}"}
     except Exception as exc:  # noqa: BLE001
         print(f"[translator] chapter {chapter_id} unexpected error: {exc!r}")
         async with session_maker() as s:
-            for p in paragraphs:
-                p.status = -1
+            await s.execute(
+                update(Paragraph).where(Paragraph.chapter_id == chapter_id).values(status=-1)
+            )
             await s.commit()
         return {"status": "failed", "reason": f"unexpected: {exc!r}"}
 
     if not translated_text:
         async with session_maker() as s:
-            for p in paragraphs:
-                p.status = -1
+            await s.execute(
+                update(Paragraph).where(Paragraph.chapter_id == chapter_id).values(status=-1)
+            )
             await s.commit()
         return {"status": "failed", "reason": "empty response"}
 
@@ -214,7 +220,13 @@ async def translate_chapter(
 
     # 8) 写回 DB
     async with session_maker() as s:
-        for i, p in enumerate(paragraphs):
+        stmt = (
+            select(Paragraph)
+            .where(Paragraph.chapter_id == chapter_id)
+            .order_by(Paragraph.paragraph_index)
+        )
+        db_paras = list((await s.execute(stmt)).scalars().all())
+        for i, p in enumerate(db_paras):
             text = translated_paragraphs[i]
             p.translated_text = text
             p.status = 2 if text else -1
