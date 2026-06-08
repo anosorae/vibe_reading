@@ -20,17 +20,20 @@
 - DB file `vibe_reading.db` is gitignored.
 - Uploads stored in `uploads/` (gitignored).
 - No npm/Vite — frontend is Jinja2 + TailwindCSS CDN + Alpine.js CDN.
-- Translation calls LLM via OpenAI SDK (`AsyncOpenAI`). Supports any OpenAI-compatible provider. DeepSeek thinking mode auto-disabled when base_url contains "deepseek".
-- Translation runs via `BackgroundTasks.add_task` (in-process, not celery/redis). Restarting the server mid-translation loses in-progress work.
-- **Upload does NOT auto-translate.** Translation is per-chapter, triggered by user action.
+- Translation calls LLM via OpenAI SDK (`AsyncOpenAI`) with streaming (`stream=True`). Supports any OpenAI-compatible provider. DeepSeek thinking mode auto-disabled when base_url contains "deepseek".
+- Translation is streamed via SSE (`POST /translate/stream/{id}`). Frontend reads `ReadableStream`, displays tokens in real-time, then reloads chapter on completion.
+- **Upload does NOT auto-translate.** Translation is per-chapter, triggered by user action or auto on navigation to en mode.
 
 ## Key Conventions
 
-- `paragraphs.status`: 0 = pending, 1 = in_progress, 2 = done, -1 = failed, 3 = too_long
-- Chapters > `CHAPTER_MAX_CHARS` chars are rejected outright (status=3 on all paragraphs).
-- Previous chapter's English translation is used as context (truncated to 30K chars, head+tail half each).
+- No Paragraph model. Book → Chapter only. Chapter stores `content` (original) and `translated_content` (English only).
+- `chapters.status`: 0 = pending, 1 = in_progress, 2 = done, -1 = failed, 3 = too_long
+- Chapters > `CHAPTER_MAX_CHARS` chars are rejected outright (status=3).
+- Previous chapter's English translation is used as context (truncated to 30K chars).
+- LLM produces English-only translation. Frontend renders EN paragraphs; click any paragraph to show original CN underneath (lighter font).
+- Two reading modes: 中文 (Chinese only) and 英文 (English with click-to-show original).
 - No test framework, no lint/typecheck config.
-- All SQLite I/O uses executemany for bulk inserts (never ORM loop for paragraphs).
+- All SQLite I/O uses executemany for bulk inserts.
 
 ## Think Before Coding
 

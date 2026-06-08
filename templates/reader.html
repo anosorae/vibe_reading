@@ -24,7 +24,6 @@
             <div class="flex items-center gap-1 shrink-0">
                 <button type="button" @click="switchMode('zh')"  :class="mode === 'zh'  ? 'text-indigo-600 bg-indigo-50' : 'text-slate-500 hover:text-slate-700'" class="px-2.5 py-1 text-xs font-medium rounded-md transition">中文</button>
                 <button type="button" @click="switchMode('en')"  :class="mode === 'en'  ? 'text-indigo-600 bg-indigo-50' : 'text-slate-500 hover:text-slate-700'" class="px-2.5 py-1 text-xs font-medium rounded-md transition">英文</button>
-                <button type="button" @click="switchMode('both')" :class="mode === 'both' ? 'text-indigo-600 bg-indigo-50' : 'text-slate-500 hover:text-slate-700'" class="px-2.5 py-1 text-xs font-medium rounded-md transition">双语</button>
                 <div class="w-px h-4 bg-slate-200 mx-1"></div>
                 <button type="button" @click="catalogOpen = true" class="px-2.5 py-1 text-xs font-medium text-slate-500 hover:text-indigo-600 rounded-md transition flex items-center gap-1">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
@@ -34,7 +33,7 @@
         </div>
     </div>
 
-    <!-- 目录弹窗 (居中全屏) -->
+    <!-- 目录弹窗 -->
     <div x-show="catalogOpen" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
          class="fixed inset-0 z-50 flex items-center justify-center p-4" style="display:none">
         <div class="absolute inset-0 bg-black/40" @click="catalogOpen = false"></div>
@@ -81,120 +80,107 @@
                     <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
                     <span class="truncate" x-text="prevTitle"></span>
                 </a>
+                <span x-show="!hasPrev"></span>
                 <a href="#" @click.prevent="nextChapter" x-show="hasNext"
                    class="text-sm text-slate-500 hover:text-indigo-600 transition inline-flex items-center gap-1.5 max-w-[45%]">
                     <span class="truncate" x-text="nextTitle"></span>
                     <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
                 </a>
+                <span x-show="!hasNext"></span>
             </footer>
         </article>
     </div>
 </div>
 
 <style>
-    .paragraph-en { display: none; }
-    .paragraph-zh { display: block; }
-    body.mode-en  .paragraph-zh { display: none; }
-    body.mode-en  .paragraph-en { display: block; cursor: pointer; }
-    body.mode-en  .paragraph-en:hover { color: #4f46e5; }
-    body.mode-en  .paragraph[data-expanded="1"] .paragraph-zh { display: block; }
-    body.mode-both .paragraph-en { display: block; font-style: italic; color: #64748b; }
-    body.mode-both .paragraph-zh { margin-bottom: 0.25rem; }
+    .zh-para { color: #1e293b; line-height: 1.9; font-size: 1rem; margin-bottom: 0.75rem; text-indent: 2em; }
+    .en-para { color: #334155; line-height: 1.9; font-size: 1rem; margin-bottom: 0.5rem; cursor: pointer; }
+    .en-para:hover { color: #1e293b; }
+    .en-original { color: #94a3b8; line-height: 1.7; font-size: 0.9rem; margin-bottom: 1rem; padding-left: 0.75rem; border-left: 2px solid #e2e8f0; display: none; }
 </style>
 
 <script>
     function escapeHtml(s) {
-        return String(s == null ? '' : s)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
+        const d = document.createElement('div');
+        d.appendChild(document.createTextNode(s));
+        return d.innerHTML;
     }
 
     document.addEventListener('alpine:init', () => {
-        const cfg = window.VIBE_READING || {};
         Alpine.data('reader', () => ({
-            bookId: cfg.bookId,
+            bookId: window.VIBE_READING.bookId,
+            chapterMaxChars: window.VIBE_READING.chapterMaxChars,
+            chapters: window.VIBE_READING.chapters,
             mode: 'zh',
-            chapterMaxChars: cfg.chapterMaxChars,
-            chapters: cfg.chapters || [],
-            chapterStatus: {},
-            chapterMap: {},
             activeChapterId: null,
+            currentTitle: '',
+            hasPrev: false,
+            hasNext: false,
+            prevTitle: '',
+            nextTitle: '',
             catalogOpen: false,
+            chapterStatus: {},
             _timer: null,
-
-            get hasPrev() {
-                const ch = this.chapterMap[this.activeChapterId];
-                return ch && ch.prev_chapter_id != null;
-            },
-            get hasNext() {
-                const ch = this.chapterMap[this.activeChapterId];
-                return ch && ch.next_chapter_id != null;
-            },
-            get currentTitle() {
-                const ch = this.chapterMap[this.activeChapterId];
-                return ch ? ch.title : '';
-            },
-            get prevTitle() {
-                const ch = this.chapterMap[this.activeChapterId];
-                if (!ch || !ch.prev_chapter_id) return '';
-                const prev = this.chapterMap[ch.prev_chapter_id];
-                return prev ? prev.title : '';
-            },
-            get nextTitle() {
-                const ch = this.chapterMap[this.activeChapterId];
-                if (!ch || !ch.next_chapter_id) return '';
-                const next = this.chapterMap[ch.next_chapter_id];
-                return next ? next.title : '';
-            },
+            _streaming: false,
 
             init() {
-                document.body.classList.add('mode-zh');
-                this.chapterMap = Object.fromEntries(this.chapters.map(c => [c.id, c]));
+                for (const ch of this.chapters) {
+                    this.chapterStatus[ch.id] = ch;
+                }
+                const first = this.chapters[0];
+                if (first) {
+                    this.navigateTo(first.id);
+                }
                 this.fetchStatus();
-                if (this.chapters.length > 0) {
-                    this.navigateTo(this.chapters[0].id);
-                }
-                document.addEventListener('click', (e) => {
-                    if (this.mode !== 'en') return;
-                    const p = e.target.closest('.paragraph');
-                    if (!p) return;
-                    if (e.target.closest('.paragraph-en')) {
-                        p.dataset.expanded = p.dataset.expanded === '1' ? '0' : '1';
-                    }
-                });
             },
-            destroy() {
-                if (this._timer) clearInterval(this._timer);
-            },
-            switchMode(m) {
-                this.mode = m;
-                document.body.classList.remove('mode-zh', 'mode-en', 'mode-both');
-                document.body.classList.add('mode-' + m);
-                if (m !== 'zh' && this.activeChapterId) {
-                    this.maybeTranslateChapter(this.activeChapterId);
-                }
-            },
+
             navigateTo(id) {
+                if (this.activeChapterId === id) return;
                 this.activeChapterId = id;
-                this.loadChapter(id);
+                const ch = this.chapters.find(c => c.id === id);
+                this.currentTitle = ch ? ch.title : '';
+                this.hasPrev = ch ? !!ch.prev_chapter_id : false;
+                this.hasNext = ch ? !!ch.next_chapter_id : false;
+                this.prevTitle = '';
+                this.nextTitle = '';
+                if (ch && ch.prev_chapter_id) {
+                    const prev = this.chapters.find(c => c.id === ch.prev_chapter_id);
+                    if (prev) this.prevTitle = prev.title;
+                }
+                if (ch && ch.next_chapter_id) {
+                    const next = this.chapters.find(c => c.id === ch.next_chapter_id);
+                    if (next) this.nextTitle = next.title;
+                }
                 this.updateActiveBadge();
-            },
-            prevChapter() {
-                const ch = this.chapterMap[this.activeChapterId];
-                if (ch && ch.prev_chapter_id != null) {
-                    this.navigateTo(ch.prev_chapter_id);
+                this.loadChapter(id);
+                if (this.mode !== 'zh') {
+                    this.maybeTranslateChapter(id);
                 }
             },
+
+            prevChapter() {
+                const ch = this.chapters.find(c => c.id === this.activeChapterId);
+                if (ch && ch.prev_chapter_id) this.navigateTo(ch.prev_chapter_id);
+            },
+
             nextChapter() {
-                const ch = this.chapterMap[this.activeChapterId];
-                if (ch && ch.next_chapter_id != null) {
+                const ch = this.chapters.find(c => c.id === this.activeChapterId);
+                if (ch && ch.next_chapter_id) {
                     this.navigateTo(ch.next_chapter_id);
                     this.maybeTranslateNext(ch.next_chapter_id);
                 }
             },
+
+            switchMode(m) {
+                if (this.mode === m) return;
+                this.mode = m;
+                const id = this.activeChapterId;
+                if (id) {
+                    this.loadChapter(id);
+                    if (m !== 'zh') this.maybeTranslateChapter(id);
+                }
+            },
+
             async loadChapter(id) {
                 const container = document.getElementById('chapter-body');
                 if (!container) return;
@@ -208,60 +194,147 @@
                     container.innerHTML = '<p class="text-red-400 text-sm py-8 text-center">加载失败: ' + escapeHtml(e.message) + '</p>';
                 }
             },
+
             renderChapter(container, chapter) {
-                const paras = chapter.paragraphs || [];
-                const parts = paras.map((p) => {
-                    const en = p.translated
-                        ? escapeHtml(p.translated)
-                        : '<span class="text-slate-300 not-italic text-sm">未翻译</span>';
-                    return '<div class="paragraph" data-expanded="0">'
-                        + '<p class="paragraph-zh text-slate-800 leading-[1.9] text-base">' + escapeHtml(p.original || '') + '</p>'
-                        + '<p class="paragraph-en text-base text-slate-500 italic leading-[1.9]" data-pid="' + p.id + '">' + en + '</p>'
-                        + '</div>';
-                });
-                container.innerHTML = parts.join('') || '<p class="text-slate-400 text-sm py-8 text-center">(空章节)</p>';
-                container.dataset.loaded = '1';
+                const content = chapter.content || '';
+                const translated = chapter.translated_content || '';
+
+                if (this.mode === 'zh') {
+                    this.renderZh(container, content);
+                } else {
+                    this.renderEn(container, content, translated);
+                }
             },
+
+            renderZh(container, content) {
+                const lines = content.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+                if (!lines.length) {
+                    container.innerHTML = '<p class="text-slate-400 text-sm py-8 text-center">(空章节)</p>';
+                    return;
+                }
+                container.innerHTML = lines.map(p =>
+                    '<p class="zh-para">' + escapeHtml(p) + '</p>'
+                ).join('');
+            },
+
+            renderEn(container, content, translated) {
+                if (!translated) {
+                    container.innerHTML = '<p class="text-slate-400 text-sm py-8 text-center">翻译中…</p>';
+                    return;
+                }
+                const enParas = translated.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+                const cnParas = content.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+                const blocks = [];
+                for (let i = 0; i < enParas.length; i++) {
+                    const en = enParas[i];
+                    const cn = cnParas[i] || '';
+                    blocks.push(
+                        '<p class="en-para" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'block\'?\'none\':\'block\'">'
+                        + escapeHtml(en) + '</p>'
+                        + '<p class="en-original">' + escapeHtml(cn) + '</p>'
+                    );
+                }
+                container.innerHTML = blocks.join('');
+            },
+
+            _renderZhFallback(content) {
+                const lines = content.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+                return lines.map(p =>
+                    '<p class="zh-para">' + escapeHtml(p) + '</p>'
+                ).join('');
+            },
+
             canTranslate(chapterId) {
                 if (this.mode === 'zh') return false;
+                if (this._streaming) return false;
                 const ch = this.chapterStatus[chapterId];
                 if (!ch) return false;
-                if (ch.char_count > this.chapterMaxChars) return false;
-                return ch.status === 'pending' || ch.status === 'failed';
+                return ch.status !== 'done' && ch.status !== 'empty';
             },
             async translateChapter(chapterId) {
+                if (this._streaming) return;
+                this._streaming = true;
+                const container = document.getElementById('chapter-body');
+
+                // 标记为翻译中
+                if (this.chapterStatus[chapterId]) {
+                    this.chapterStatus[chapterId].status = 'in_progress';
+                }
+                this.updateActiveBadge();
+
+                let accumulated = '';
                 try {
-                    const res = await fetch('/translate/chapter/' + chapterId, { method: 'POST' });
-                    const data = await res.json().catch(() => ({}));
-                    if (res.ok && (data.status === 'started' || data.status === 'too_long')) {
-                        if (this.chapterStatus[chapterId]) {
-                            this.chapterStatus[chapterId].status = data.status;
-                        } else {
-                            this.chapterStatus[chapterId] = { id: chapterId, status: data.status };
-                        }
-                        this.updateBadge(this.chapterStatus[chapterId]);
+                    const res = await fetch('/translate/stream/' + chapterId, { method: 'POST' });
+                    if (!res.ok) {
+                        const err = await res.json().catch(() => ({}));
+                        throw new Error(err.detail || err.reason || 'HTTP ' + res.status);
                     }
+                    const reader = res.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop();
+
+                        for (const line of lines) {
+                            if (!line.startsWith('data: ')) continue;
+                            let evt;
+                            try { evt = JSON.parse(line.slice(6)); } catch { continue; }
+
+                            if (evt.type === 'chunk') {
+                                accumulated += evt.text;
+                                if (container) {
+                                    container.innerHTML = '<pre class="text-slate-600 text-sm leading-relaxed whitespace-pre-wrap font-sans">' + escapeHtml(accumulated) + '</pre>';
+                                }
+                            } else if (evt.type === 'error') {
+                                throw new Error(evt.reason);
+                            }
+                        }
+                    }
+
+                    // 流结束, 重新加载章节 (显示正式双语渲染)
+                    this._streaming = false;
+                    if (this.chapterStatus[chapterId]) {
+                        this.chapterStatus[chapterId].status = 'done';
+                    }
+                    this.updateActiveBadge();
+                    this.loadChapter(chapterId);
+
                 } catch (e) {
                     console.error('translateChapter failed:', e);
+                    this._streaming = false;
+                    if (this.chapterStatus[chapterId]) {
+                        this.chapterStatus[chapterId].status = 'failed';
+                    }
+                    this.updateActiveBadge();
+                    if (container) {
+                        container.innerHTML = '<p class="text-red-400 text-sm py-8 text-center">翻译失败: ' + escapeHtml(e.message) + '</p>';
+                    }
                 }
             },
             maybeTranslateNext(chapterId) {
                 if (chapterId == null) return;
                 if (this.mode === 'zh') return;
+                if (this._streaming) return;
                 const ch = this.chapterStatus[chapterId];
                 if (!ch) return;
                 if (ch.char_count > this.chapterMaxChars) return;
-                if (ch.status === 'pending' || ch.status === 'failed' || ch.status === 'partial') {
+                if (ch.status === 'pending' || ch.status === 'failed') {
                     this.translateChapter(chapterId);
                 }
             },
             maybeTranslateChapter(chapterId) {
                 if (chapterId == null) return;
+                if (this._streaming) return;
                 const ch = this.chapterStatus[chapterId];
                 if (!ch) return;
                 if (ch.char_count > this.chapterMaxChars) return;
                 if (ch.status === 'in_progress' || ch.status === 'done') return;
-                if (ch.status === 'pending' || ch.status === 'failed' || ch.status === 'partial') {
+                if (ch.status === 'pending' || ch.status === 'failed') {
                     this.translateChapter(chapterId);
                 }
             },
@@ -274,13 +347,13 @@
                     for (const ch of data.chapters) {
                         const prev = this.chapterStatus[ch.id];
                         this.chapterStatus[ch.id] = ch;
-                        if (!prev || prev.status !== ch.status || prev.translated_count !== ch.translated_count) {
+                        if (!prev || prev.status !== ch.status) {
                             this.updateBadge(ch);
-                            if (ch.id === this.activeChapterId && (ch.status === 'done' || ch.translated_count > (prev ? prev.translated_count : 0))) {
+                            if (ch.id === this.activeChapterId && ch.status === 'done' && prev && prev.status !== 'done') {
                                 this.loadChapter(ch.id);
                             }
                         }
-                        if (ch.status === 'pending' || ch.status === 'in_progress' || ch.status === 'partial') {
+                        if (ch.status === 'pending' || ch.status === 'in_progress') {
                             hasPending = true;
                         }
                     }
@@ -320,7 +393,6 @@
                     case 'done':        return 'bg-emerald-400';
                     case 'in_progress': return 'bg-blue-400';
                     case 'failed':      return 'bg-red-400';
-                    case 'partial':     return 'bg-amber-400';
                     case 'too_long':    return 'bg-amber-400';
                     case 'empty':       return 'bg-slate-300';
                     default:            return 'bg-slate-300';
@@ -335,7 +407,6 @@
                     case 'in_progress': return '翻译中…';
                     case 'done':        return '已翻译';
                     case 'failed':      return '翻译失败';
-                    case 'partial':     return '部分翻译 (' + ch.translated_count + '/' + ch.paragraph_count + ')';
                     case 'too_long':    return '本章过长 (' + ch.char_count.toLocaleString() + ' 字符)';
                     case 'empty':       return '空章节';
                     default:            return ch.status;
@@ -347,7 +418,6 @@
                     case 'done':        return 'bg-emerald-50 text-emerald-600';
                     case 'in_progress': return 'bg-blue-50 text-blue-600';
                     case 'failed':      return 'bg-red-50 text-red-600';
-                    case 'partial':     return 'bg-amber-50 text-amber-600';
                     case 'too_long':    return 'bg-amber-50 text-amber-600';
                     case 'empty':       return 'bg-slate-50 text-slate-400';
                     default:            return 'bg-slate-50 text-slate-400';
