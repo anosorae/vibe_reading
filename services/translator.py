@@ -1,12 +1,12 @@
 """
-按章翻译服务 (deepseek-v4-flash, 非思考模式)。
+按章翻译服务 (OpenAI 兼容格式)。
 
 设计要点:
   - 粒度: 一章 = 一次 API 调用, 段数对齐靠空行切分
   - 上下文: 上一章英译全文 (超 30K 字符则取头尾各半)
-  - 模型: deepseek-v4-flash 非思考模式 (extra_body.thinking.type=disabled)
   - 超长拒绝: 单章字符 > CHAPTER_MAX_CHARS 直接拒绝, 标记 paragraph.status=3
   - 客户端: openai.AsyncOpenAI (官方 SDK, OpenAI 兼容格式)
+  - 兼容 DeepSeek / 通义千问 / 智谱 / Moonshot / 本地 Ollama 等 OpenAI 兼容接口
 """
 from __future__ import annotations
 
@@ -24,11 +24,15 @@ from models import Book, Chapter, Paragraph
 
 load_dotenv()
 
-DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "").strip()
-DEEPSEEK_API_BASE: str = os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com").rstrip("/")
-DEEPSEEK_MODEL: str = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
+# 优先读 LLM_* (通用), 兼容 DEEPSEEK_* (旧配置)
+LLM_API_KEY: str = os.getenv("LLM_API_KEY", os.getenv("DEEPSEEK_API_KEY", "")).strip()
+LLM_API_BASE: str = os.getenv("LLM_API_BASE", os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com")).rstrip("/")
+LLM_MODEL: str = os.getenv("LLM_MODEL", os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash"))
 CHAPTER_MAX_CHARS: int = int(os.getenv("CHAPTER_MAX_CHARS", "20000"))
 PREV_CHAPTER_MAX_CHARS: int = 30000  # 上一章英译塞入 prompt 的字符上限
+
+# DeepSeek 特殊参数: 仅当 base_url 包含 deepseek 时启用非思考模式
+_IS_DEEPSEEK = "deepseek" in LLM_API_BASE.lower()
 
 # Paragraph.status 含义 (在 models.Paragraph 同一定义):
 #   0 = pending, 1 = in_progress, 2 = done, -1 = failed, 3 = too_long
@@ -139,8 +143,8 @@ async def translate_chapter(
             await s.commit()
         return {"status": "too_long", "char_count": char_count}
 
-    if not DEEPSEEK_API_KEY:
-        return {"status": "skipped", "reason": "DEEPSEEK_API_KEY 未配置"}
+    if not LLM_API_KEY:
+        return {"status": "skipped", "reason": "LLM_API_KEY (or DEEPSEEK_API_KEY) 未配置"}
 
     # 3) 标记为翻译中
     async with session_maker() as s:
@@ -160,23 +164,25 @@ async def translate_chapter(
         prev_chapter_english=prev_english,
     )
 
-    # 6) 调用 DeepSeek (OpenAI 兼容格式, 非思考模式)
+    # 6) 调用 LLM (OpenAI 兼容格式)
     try:
         client = AsyncOpenAI(
-            api_key=DEEPSEEK_API_KEY,
-            base_url=DEEPSEEK_API_BASE,
+            api_key=LLM_API_KEY,
+            base_url=LLM_API_BASE,
             timeout=120.0,
         )
-        response = await client.chat.completions.create(
-            model=DEEPSEEK_MODEL,
+        create_kwargs = dict(
+            model=LLM_MODEL,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.3,
             max_tokens=8000,
-            extra_body={"thinking": {"type": "disabled"}},
         )
+        if _IS_DEEPSEEK:
+            create_kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+        response = await client.chat.completions.create(**create_kwargs)
         translated_text = (response.choices[0].message.content or "").strip()
     except APIError as exc:
         print(f"[translator] chapter {chapter_id} API error: {exc!r}")

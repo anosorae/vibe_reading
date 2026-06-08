@@ -1,6 +1,6 @@
 # Vibe Reading — 中英双语电子书阅读器
 
-一个本地部署的单体 Python Web 应用: 上传中文 TXT 电子书, 自动识别章节, 逐**章**调用 DeepSeek 翻译为英文, 提供"中 / 英 / 双语"三种阅读模式。
+一个本地部署的单体 Python Web 应用: 上传中文 TXT 电子书, 自动识别章节, 逐**章**调用 LLM 翻译为英文, 提供"中 / 英 / 双语"三种阅读模式。
 
 零前端构建 (无 npm / Vite / Webpack), 一行命令启动。
 
@@ -9,7 +9,7 @@
 ## 特性
 
 - **TXT 解析**: 正则识别"第 X 章 / 回 / 节 / 卷 / 篇"与"Chapter X", 按非空行拆段
-- **按章翻译 (Lazy)**: 上传后**默认停在纯中文模式**; 切换到英文/双语时, 通过每章独立的"翻译本章"按钮或点击"下一章"链接, 单章触发一次 DeepSeek 调用
+- **按章翻译 (Lazy)**: 上传后**默认停在纯中文模式**; 切换到英文/双语时, 通过每章独立的"翻译本章"按钮或点击"下一章"链接, 单章触发一次 LLM 调用
   - 单章 = 一次 API 调用, 段间空行分隔保持段落结构
   - 单章 > 20K 字符直接拒绝翻译 (返回 `too_long`, 不降级)
   - 上一章英译作为**语境** (Prompt 上下文), 超 30K 字符自动截取头尾各半
@@ -29,7 +29,7 @@
 | --- | --- |
 | 后端 | FastAPI · Jinja2 · SQLAlchemy 2 (async) · SQLite (aiosqlite) · openai (官方 SDK) · python-dotenv |
 | 前端 | 原生 HTML + Jinja2 模板 · TailwindCSS (CDN) · Alpine.js (CDN) |
-| LLM | DeepSeek API (走 OpenAI Chat Completions 格式, 关闭思考模式) |
+| LLM | OpenAI Chat Completions 兼容格式 (DeepSeek / 通义千问 / 智谱 / Ollama 等) |
 
 ---
 
@@ -55,16 +55,26 @@ uv sync
 
 ### 2. 配置环境变量
 
-编辑 `.env`, 填入你的 DeepSeek API Key (申请: https://platform.deepseek.com/):
+编辑 `.env`, 填入你的 LLM API Key:
 
 ```ini
-DEEPSEEK_API_KEY=sk-你的真实-key
-DEEPSEEK_API_BASE=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-v4-flash
+LLM_API_KEY=sk-你的真实-key
+LLM_API_BASE=https://api.deepseek.com
+LLM_MODEL=deepseek-v4-flash
 CHAPTER_MAX_CHARS=20000
 ```
 
-> DeepSeek 官方推荐 `https://api.deepseek.com` (无 `/v1`), `https://api.deepseek.com/v1` 也可。
+支持任何 OpenAI Chat Completions 兼容接口:
+
+| 提供方 | LLM_API_BASE | LLM_MODEL |
+| --- | --- | --- |
+| DeepSeek | `https://api.deepseek.com` | `deepseek-v4-flash` |
+| 通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
+| 智谱 | `https://open.bigmodel.cn/api/paas/v4` | `glm-4-flash` |
+| Moonshot | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` |
+| 本地 Ollama | `http://localhost:11434/v1` | `qwen2.5:7b` |
+
+> 也兼容旧变量名 `DEEPSEEK_API_KEY` / `DEEPSEEK_API_BASE` / `DEEPSEEK_MODEL`, 优先读 `LLM_*`。
 
 ### 3. 启动
 
@@ -97,7 +107,7 @@ vibe_reading/
 ├── services/
 │   ├── __init__.py
 │   ├── parser.py            # TXT 解析与入库
-│   └── translator.py        # DeepSeek 调用, 单章 translate_chapter()
+│   └── translator.py        # LLM 调用, 单章 translate_chapter()
 ├── templates/
 │   ├── base.html            # 引入 Tailwind + Alpine.js CDN
 │   ├── index.html           # 书架 + 上传表单
@@ -184,7 +194,7 @@ vibe_reading/
 1. 上传**不自动翻译**, 阅读器加载后停在纯中文模式
 2. 切换到英文/双语后, 用户点击"翻译本章"或点击"下一章 ↓"链接触发
 3. 后端: `POST /translate/chapter/{id}` → 校验 (in_progress / done / empty / too_long 各自早退) → 通过 `BackgroundTasks.add_task` 启动 `translate_chapter()`
-4. `translate_chapter()` 拉该章所有段落 + 上一章的英译 (作为语境) → 拼成一条 Prompt → `openai.AsyncOpenAI` 调 DeepSeek (非思考模式, `extra_body={"thinking": {"type": "disabled"}}`) → 按空行拆回复 → UPDATE 段落 (status=2, translated_text=...)
+4. `translate_chapter()` 拉该章所有段落 + 上一章的英译 (作为语境) → 拼成一条 Prompt → `openai.AsyncOpenAI` 调 LLM → 按空行拆回复 → UPDATE 段落 (status=2, translated_text=...)
 5. 段落数对不上时补空字符串 / 截断, 落库时打 WARN 日志
 
 ### 阅读器 (`templates/reader.html`)
@@ -223,11 +233,11 @@ USER:
 
 ## 常见问题
 
-**没有 DeepSeek API Key 能用吗?**
+**没有 API Key 能用吗?**
 可以。上传 / 解析 / 中文阅读完全正常, 切换到英文/双语时会显示"未翻译"占位。手动把译文写进 `paragraphs.translated_text` 也能在英文/双语模式显示。
 
 **想换 OpenAI / 智谱 / 自建网关?**
-`.env` 改 `DEEPSEEK_API_BASE` 和 `DEEPSEEK_MODEL` 即可, 代码兼容任何 OpenAI Chat Completions 格式 (SDK 直连)。注意: 非 DeepSeek 提供方通常没有 "thinking" 字段, 删掉 `extra_body` 即可。
+`.env` 改 `LLM_API_KEY`、`LLM_API_BASE`、`LLM_MODEL` 即可。DeepSeek 特有的 `extra_body` 参数会自动跳过, 无需手动处理。也兼容旧变量名 `DEEPSEEK_*`。
 
 **端口 8000 被占用?**
 改 `main.py` 末尾 `uvicorn.run(..., port=8000)` 即可。
