@@ -9,8 +9,8 @@
 
 ## Environment
 
-- Copy `.env.example` or edit `.env` with real `DEEPSEEK_API_KEY`.
-- Key vars: `DEEPSEEK_API_KEY`, `DEEPSEEK_API_BASE`, `DEEPSEEK_MODEL`, `CHAPTER_MAX_CHARS` (default 20000).
+- Edit `.env` with `LLM_API_KEY`, `LLM_API_BASE`, `LLM_MODEL`. Also accepts old `DEEPSEEK_*` names as fallback.
+- Key vars: `LLM_API_KEY`, `LLM_API_BASE` (default `https://api.deepseek.com`), `LLM_MODEL` (default `deepseek-v4-flash`), `CHAPTER_MAX_CHARS` (default 20000).
 - `.env` is gitignored.
 
 ## Architecture
@@ -20,7 +20,7 @@
 - DB file `vibe_reading.db` is gitignored.
 - Uploads stored in `uploads/` (gitignored).
 - No npm/Vite — frontend is Jinja2 + TailwindCSS CDN + Alpine.js CDN.
-- Translation calls DeepSeek via OpenAI SDK (`AsyncOpenAI`). Thinking mode disabled.
+- Translation calls LLM via OpenAI SDK (`AsyncOpenAI`). Supports any OpenAI-compatible provider. DeepSeek thinking mode auto-disabled when base_url contains "deepseek".
 - Translation runs via `BackgroundTasks.add_task` (in-process, not celery/redis). Restarting the server mid-translation loses in-progress work.
 - **Upload does NOT auto-translate.** Translation is per-chapter, triggered by user action.
 
