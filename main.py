@@ -88,17 +88,35 @@ async def index(
     result = await session.execute(stmt)
     books = list(result.scalars().all())
 
+    # 构建书籍列表，带上阅读进度信息
+    books_with_progress = []
+    for b in books:
+        last_read_title = None
+        if b.last_read_chapter_id:
+            ch = await session.get(Chapter, b.last_read_chapter_id)
+            if ch and ch.book_id == b.id:
+                last_read_title = ch.title
+        books_with_progress.append({
+            "id": b.id,
+            "title": b.title,
+            "total_chapters": b.total_chapters,
+            "translated_chapters": b.translated_chapters,
+            "created_at": b.created_at,
+            "last_read_chapter_id": b.last_read_chapter_id,
+            "last_read_title": last_read_title,
+        })
+
     flash = None
     if uploaded is not None:
-        for b in books:
-            if b.id == uploaded:
-                flash = {"id": b.id, "title": b.title}
+        for b in books_with_progress:
+            if b["id"] == uploaded:
+                flash = {"id": b["id"], "title": b["title"]}
                 break
 
     return templates.TemplateResponse(
         request,
         "index.html",
-        {"books": books, "flash": flash},
+        {"books": books_with_progress, "flash": flash},
     )
 
 
@@ -283,6 +301,28 @@ async def chapter_status(
             for ch in chapters
         ],
     }
+
+
+@app.post("/api/reading-progress/{book_id}")
+async def save_reading_progress(
+    book_id: int,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+):
+    book = await session.get(Book, book_id)
+    if book is None:
+        raise HTTPException(status_code=404, detail="书籍不存在")
+
+    body = await request.json()
+    chapter_id = body.get("chapter_id")
+    if chapter_id is not None:
+        chapter = await session.get(Chapter, chapter_id)
+        if chapter is None or chapter.book_id != book_id:
+            raise HTTPException(status_code=400, detail="章节不存在")
+
+    book.last_read_chapter_id = chapter_id
+    await session.commit()
+    return {"ok": True}
 
 
 # ---------------------- 一键启动 ----------------------

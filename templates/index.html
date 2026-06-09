@@ -84,13 +84,16 @@
                     共 {{ book.total_chapters }} 章 · 已翻译 {{ book.translated_chapters }} 章
                     · {{ book.created_at.strftime('%Y-%m-%d %H:%M') }}
                 </div>
+                {% if book.last_read_title %}
+                <div class="text-xs text-indigo-400 mt-0.5">读到: {{ book.last_read_title }}</div>
+                {% endif %}
             </div>
             <div class="flex items-center gap-2 shrink-0">
                 <a
                     href="/read/{{ book.id }}"
-                    class="px-3 py-1.5 text-sm bg-slate-100 hover:bg-slate-200 rounded-md transition"
+                    class="px-3 py-1.5 text-sm rounded-md transition {% if book.last_read_chapter_id %}bg-indigo-100 text-indigo-700 hover:bg-indigo-200{% else %}bg-slate-100 hover:bg-slate-200{% endif %}"
                 >
-                    阅读
+                    {% if book.last_read_chapter_id %}继续阅读{% else %}阅读{% endif %}
                 </a>
                 <form action="/delete/{{ book.id }}" method="post"
                       onsubmit="return confirm('确定删除《{{ book.title }}》？此操作不可撤销。')">

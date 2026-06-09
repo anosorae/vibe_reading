@@ -20,6 +20,7 @@ class Book(Base):
     file_path: Mapped[str] = mapped_column(String(1024))
     total_chapters: Mapped[int] = mapped_column(Integer, default=0)
     translated_chapters: Mapped[int] = mapped_column(Integer, default=0)
+    last_read_chapter_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=_utcnow)
 
     chapters: Mapped[list["Chapter"]] = relationship(

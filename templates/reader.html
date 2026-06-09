@@ -8,6 +8,7 @@
         bookId: {{ book.id }},
         chapterMaxChars: {{ chapter_max_chars }},
         chapters: {{ chapters | tojson | safe }},
+        lastReadChapterId: {{ book.last_read_chapter_id | tojson | safe }},
     };
 </script>
 
@@ -127,9 +128,13 @@
                 for (const ch of this.chapters) {
                     this.chapterStatus[ch.id] = ch;
                 }
-                const first = this.chapters[0];
-                if (first) {
-                    this.navigateTo(first.id);
+                // 从服务端恢复阅读进度
+                let startId = window.VIBE_READING.lastReadChapterId;
+                if (!startId || !this.chapters.some(c => c.id === startId)) {
+                    startId = this.chapters[0] ? this.chapters[0].id : null;
+                }
+                if (startId) {
+                    this.navigateTo(startId);
                 }
                 this.fetchStatus();
             },
@@ -139,6 +144,14 @@
                 this.activeChapterId = id;
                 const ch = this.chapters.find(c => c.id === id);
                 this.currentTitle = ch ? ch.title : '';
+                // 保存阅读进度到服务端
+                if (ch) {
+                    fetch('/api/reading-progress/' + this.bookId, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({chapter_id: ch.id})
+                    }).catch(() => {});
+                }
                 this.hasPrev = ch ? !!ch.prev_chapter_id : false;
                 this.hasNext = ch ? !!ch.next_chapter_id : false;
                 this.prevTitle = '';
