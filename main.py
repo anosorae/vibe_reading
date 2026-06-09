@@ -1,5 +1,5 @@
 """
-Vibe Reading - 中英双语电子书阅读器
+Vibe Reading - 沉浸式英语学习阅读
 FastAPI 应用入口: 路由 + 启动 uvicorn (一键 python main.py)
 """
 from __future__ import annotations

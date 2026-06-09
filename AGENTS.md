@@ -24,16 +24,38 @@
 - Translation is streamed via SSE (`POST /translate/stream/{id}`). Frontend reads `ReadableStream`, displays tokens in real-time, then reloads chapter on completion.
 - **Upload does NOT auto-translate.** Translation is per-chapter, triggered by user action or auto on navigation to en mode.
 
+## Key Features
+
+- **Reading progress**: Server-side storage (`books.last_read_chapter_id`). Saved on chapter navigation. Homepage shows "继续阅读" for books with progress. Reader auto-restores last position on open.
+- **Re-translation**: ↻ button appears on done/failed chapters. Calls `/api/reset-chapter` to reset status to pending, then triggers fresh translation.
+- **Scroll-hide navbar**: Navigation bar hides on scroll down, shows on scroll up. Uses Alpine.js `x-show` with CSS transitions.
+- **Chinese mode**: Hides translation status badge, translate button, and retry button when in pure Chinese reading mode.
+
 ## Key Conventions
 
 - No Paragraph model. Book → Chapter only. Chapter stores `content` (original) and `translated_content` (English only).
+- `books.last_read_chapter_id`: nullable, references `chapters.id`, tracks reading position.
 - `chapters.status`: 0 = pending, 1 = in_progress, 2 = done, -1 = failed, 3 = too_long
 - Chapters > `CHAPTER_MAX_CHARS` chars are rejected outright (status=3).
 - Previous chapter's English translation is used as context (truncated to 30K chars).
-- LLM produces English-only translation. Frontend renders EN paragraphs; click any paragraph to show original CN underneath (lighter font).
-- Two reading modes: 中文 (Chinese only) and 英文 (English with click-to-show original).
+- LLM produces English-only translation with [N] paragraph markers. Frontend renders EN paragraphs; click any paragraph to show original CN underneath (lighter font).
+- Two reading modes: 中文 (Chinese only, hides translation controls) and 英文 (English with click-to-show original).
 - No test framework, no lint/typecheck config.
 - All SQLite I/O uses executemany for bulk inserts.
+
+## API Endpoints
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/` | Homepage with bookshelf |
+| `POST` | `/upload` | Upload TXT file |
+| `POST` | `/delete/{book_id}` | Delete book |
+| `GET` | `/read/{book_id}` | Reader page |
+| `GET` | `/api/chapter/{id}` | Get chapter data |
+| `POST` | `/translate/stream/{id}` | SSE streaming translation |
+| `POST` | `/api/reset-chapter/{id}` | Reset chapter status to pending |
+| `POST` | `/api/reading-progress/{book_id}` | Save reading progress |
+| `GET` | `/api/chapter-status/{book_id}` | Get all chapters' status |
 
 ## Think Before Coding
 
