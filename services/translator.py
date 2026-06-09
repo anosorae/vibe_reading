@@ -37,8 +37,14 @@ STATUS_TOO_LONG = 3
 
 SYSTEM_PROMPT = """你是一位资深中英文学翻译。
 将用户给定的整章中文翻译为英文, 保留原文语气、风格、文学性。
-保持与原文完全相同的段落数, 段与段之间用一个空行分隔。
-只输出英文译文, 段间空行分隔, 严禁任何解释、标题、注释或额外内容。"""
+
+源文中的每个段落以 [1], [2], [3] 等标记开头。你必须在英文译文中保留完全相同的段落标记, 使得每个标记段落与原文一一对应。
+
+输出格式:
+[1] 第一段的英文译文[2] 第二段的英文译文
+...
+
+严禁输出任何解释、标题、注释或额外内容。"""
 
 
 def _build_user_prompt(
@@ -46,14 +52,16 @@ def _build_user_prompt(
     chapter_zh: str,
     prev_chapter_english: Optional[str],
 ) -> str:
+    paragraphs = [p.strip() for p in chapter_zh.split("\n\n") if p.strip()]
+    marked_text = "\n\n".join(f"[{i+1}] {p}" for i, p in enumerate(paragraphs))
     parts: list[str] = []
     if prev_chapter_english:
         parts.append("上一章英译 (供术语 / 风格衔接参考):")
         parts.append(prev_chapter_english)
         parts.append("\n---\n")
     parts.append(f"Chapter: {chapter_title}")
-    parts.append("请将以下整章中文翻译为英文:")
-    parts.append(chapter_zh)
+    parts.append("请将以下整章中文翻译为英文, 保留每个段落的 [N] 标记:")
+    parts.append(marked_text)
     return "\n".join(parts)
 
 

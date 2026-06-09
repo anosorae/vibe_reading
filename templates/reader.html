@@ -222,21 +222,35 @@
                     container.innerHTML = '<p class="text-slate-400 text-sm py-8 text-center">翻译中…</p>';
                     return;
                 }
-                const enParas = translated.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
-                const cnAll = content.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+                // Split Chinese into paragraphs (by \n\n, matching parser output)
+                const cnParas = content.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+                // Parse English: extract [N] markers and text
+                const enBlocks = translated.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+                const parsed = [];
+                for (const block of enBlocks) {
+                    const m = block.match(/^\[(\d+)\]\s*([\s\S]*)/);
+                    if (m) {
+                        parsed.push({ marker: parseInt(m[1]), text: m[2].trim() });
+                    } else {
+                        parsed.push({ marker: null, text: block });
+                    }
+                }
+                // Group by marker: consecutive blocks with the same marker belong together
+                // (LLM might merge [1]+[2] into "[1] text..." losing [2])
+                // Build index: marker -> list of CN paragraph indices (0-based)
                 const blocks = [];
-                for (let i = 0; i < enParas.length; i++) {
+                for (const ep of parsed) {
+                    const enHtml = escapeHtml(ep.text);
+                    let cnHtml = '';
+                    if (ep.marker !== null && ep.marker >= 1 && ep.marker <= cnParas.length) {
+                        cnHtml = escapeHtml(cnParas[ep.marker - 1]);
+                    }
                     blocks.push(
-                        '<p class="en-para" onclick="document.getElementById(\'en-original-all\').style.display=document.getElementById(\'en-original-all\').style.display===\'block\'?\'none\':\'block\'">'
-                        + escapeHtml(enParas[i]) + '</p>'
+                        '<p class="en-para" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'block\'?\'none\':\'block\'">'
+                        + enHtml + '</p>'
+                        + '<p class="en-original">' + cnHtml + '</p>'
                     );
                 }
-                blocks.push(
-                    '<div id="en-original-all" class="en-original" style="display:none;margin-top:1.5rem">'
-                    + '<p style="color:#94a3b8;font-size:0.75rem;margin-bottom:0.75rem">原文</p>'
-                    + cnAll.map(p => '<p class="zh-para" style="color:#94a3b8;font-size:0.9rem">' + escapeHtml(p) + '</p>').join('')
-                    + '</div>'
-                );
                 container.innerHTML = blocks.join('');
             },
 
