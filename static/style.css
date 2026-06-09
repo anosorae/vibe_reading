@@ -204,14 +204,15 @@ body::before {
 
 /* --- Navigation --- */
 .nav-bar {
+    background: rgba(250, 247, 242, 0.92);
+    backdrop-filter: blur(12px) saturate(1.2);
+    -webkit-backdrop-filter: blur(12px) saturate(1.2);
+    border-bottom: 1px solid var(--color-linen);
     position: sticky;
     top: 0;
     z-index: 40;
     transition: transform var(--duration-normal) var(--ease-out-expo),
                 opacity var(--duration-normal) var(--ease-out-expo);
-    max-width: 56rem;
-    margin: 0 auto;
-    padding: 0 clamp(1.5rem, 4vw, 3rem);
 }
 
 .nav-bar.nav-hidden {
@@ -220,20 +221,12 @@ body::before {
 }
 
 .nav-inner {
-    width: 100%;
-    padding: 1rem 0;
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 1rem 2rem;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: var(--color-cream);
-    border-bottom: 1px solid var(--color-linen);
-}
-
-/* --- Main Content --- */
-.page-main {
-    max-width: 56rem;
-    margin: 0 auto;
-    padding: 2.5rem clamp(1.5rem, 4vw, 3rem);
 }
 
 .nav-brand {
@@ -529,38 +522,20 @@ body::before {
     width: 100%;
     max-width: 56rem;
     margin: 0 auto;
-    padding: 0 clamp(1.5rem, 4vw, 3rem);
+    padding: 0 clamp(1rem, 4vw, 3rem);
 }
 
 .chapter-card {
-    background: var(--color-parchment);
-    border: none;
-    border-radius: 20px;
-    box-shadow:
-        0 1px 2px rgba(44, 40, 37, 0.04),
-        0 4px 12px rgba(44, 40, 37, 0.03),
-        inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    background: white;
+    border: 1px solid var(--color-linen);
+    border-radius: 16px;
+    box-shadow: var(--shadow-card);
     overflow: hidden;
-    position: relative;
-}
-
-.chapter-card::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    background: linear-gradient(
-        180deg,
-        rgba(255, 255, 255, 0.5) 0%,
-        rgba(255, 255, 255, 0.2) 40%,
-        transparent 100%
-    );
 }
 
 .chapter-header {
     padding: 2rem clamp(1.5rem, 4vw, 3rem) 1.5rem;
-    border-bottom: 1px solid rgba(217, 208, 195, 0.5);
+    border-bottom: 1px solid var(--color-linen);
     position: relative;
 }
 
@@ -572,7 +547,7 @@ body::before {
     right: clamp(1.5rem, 4vw, 3rem);
     height: 1px;
     background: linear-gradient(to right, transparent, var(--color-sienna), transparent);
-    opacity: 0.2;
+    opacity: 0.3;
 }
 
 .chapter-section {
@@ -595,12 +570,11 @@ body::before {
 .chapter-body {
     padding: 2rem clamp(1.5rem, 4vw, 3rem);
     min-height: 50vh;
-    position: relative;
 }
 
 .chapter-footer {
     padding: 1.25rem clamp(1.5rem, 4vw, 3rem);
-    border-top: 1px solid rgba(217, 208, 195, 0.5);
+    border-top: 1px solid var(--color-linen);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -656,7 +630,7 @@ body::before {
     font-size: 0.9375rem;
     margin-bottom: 1.25rem;
     padding-left: 1.25rem;
-    border-left: 2px solid rgba(217, 208, 195, 0.6);
+    border-left: 2px solid var(--color-linen);
     display: none;
     font-style: italic;
 }
@@ -668,23 +642,24 @@ body::before {
 
 /* --- Reader Toolbar --- */
 .reader-toolbar {
+    background: rgba(250, 247, 242, 0.95);
+    backdrop-filter: blur(16px) saturate(1.3);
+    -webkit-backdrop-filter: blur(16px) saturate(1.3);
+    border-bottom: 1px solid var(--color-linen);
     position: sticky;
     top: 0;
     z-index: 30;
     transition: transform var(--duration-normal) var(--ease-out-expo);
-    max-width: 56rem;
-    margin: 0 auto;
-    padding: 0 clamp(1.5rem, 4vw, 3rem);
 }
 
 .toolbar-inner {
     width: 100%;
-    padding: 0.75rem 0;
+    max-width: 56rem;
+    margin: 0 auto;
+    padding: 0.75rem clamp(1rem, 4vw, 3rem);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: var(--color-cream);
-    border-bottom: 1px solid rgba(217, 208, 195, 0.5);
 }
 
 .toolbar-left {
@@ -951,7 +926,7 @@ body::before {
 /* --- Responsive --- */
 @media (max-width: 640px) {
     .nav-inner {
-        padding: 0.75rem clamp(1rem, 3vw, 1.5rem);
+        padding: 0.75rem 1rem;
     }
 
     .nav-brand {
