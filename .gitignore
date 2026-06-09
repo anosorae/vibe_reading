@@ -31,6 +31,7 @@ uploads/*
 # 静态目录占位
 static/*
 !static/.gitkeep
+!static/style.css
 
 # IDE / 编辑器
 .vscode/
