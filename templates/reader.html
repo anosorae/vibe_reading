@@ -4,12 +4,14 @@
 
 {% block head_extra %}
 <style>
-    /* Reader-specific overrides for full immersion */
     body {
         background: var(--color-cream);
+        background-image:
+            radial-gradient(ellipse 80% 60% at 50% 0%, rgba(243, 237, 228, 0.8) 0%, transparent 70%),
+            radial-gradient(ellipse 60% 40% at 50% 100%, rgba(237, 231, 220, 0.5) 0%, transparent 60%);
     }
     body::before {
-        opacity: 0.025;
+        opacity: 0.02;
     }
 </style>
 {% endblock %}
