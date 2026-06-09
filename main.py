@@ -325,6 +325,19 @@ async def save_reading_progress(
     return {"ok": True}
 
 
+@app.post("/api/reset-chapter/{chapter_id}")
+async def reset_chapter(
+    chapter_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    chapter = await session.get(Chapter, chapter_id)
+    if chapter is None:
+        raise HTTPException(status_code=404, detail="章节不存在")
+    chapter.status = 0
+    await session.commit()
+    return {"ok": True}
+
+
 # ---------------------- 一键启动 ----------------------
 
 if __name__ == "__main__":
