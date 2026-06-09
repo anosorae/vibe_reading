@@ -550,9 +550,17 @@ body::before {
     opacity: 0.3;
 }
 
+.chapter-section {
+    font-family: var(--font-ui);
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--color-sienna);
+    margin-bottom: 0.5rem;
+}
+
 .chapter-title {
     font-family: var(--font-display);
-    font-size: 1.75rem;
+    font-size: 1.5rem;
     font-weight: 600;
     color: var(--color-ink);
     line-height: 1.3;
@@ -783,6 +791,52 @@ body::before {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.catalog-section-title {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--color-sienna);
+    padding: 1rem 1.5rem 0.5rem;
+    border-top: 1px solid var(--color-linen);
+    margin-top: 0.5rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: background var(--duration-fast) ease;
+    user-select: none;
+}
+
+.catalog-section-title:hover {
+    background: var(--color-parchment);
+}
+
+.catalog-section-title:first-child {
+    border-top: none;
+    margin-top: 0;
+}
+
+.catalog-section-count {
+    font-size: 0.8125rem;
+    color: var(--color-stone);
+    font-weight: 400;
+    margin-left: auto;
+}
+
+.catalog-section-arrow {
+    width: 16px;
+    height: 16px;
+    transition: transform var(--duration-fast) ease;
+    flex-shrink: 0;
+}
+
+.catalog-section-arrow.collapsed {
+    transform: rotate(-90deg);
+}
+
+.catalog-group {
+    /* 分组容器 */
 }
 
 /* Status dot colors */

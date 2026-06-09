@@ -88,14 +88,47 @@
                 </button>
             </div>
             <div class="modal-body">
-                <template x-for="ch in chapters" :key="ch.id">
-                    <button @click="navigateTo(ch.id); catalogOpen = false"
-                            :class="activeChapterId === ch.id ? 'active' : ''"
-                            class="catalog-item">
-                        <span :id="'cat-dot-' + ch.id"
-                              :class="'catalog-dot dot-' + ch.status"></span>
-                        <span class="catalog-title" x-text="ch.title"></span>
-                    </button>
+                <template x-for="(group, groupIndex) in catalogGroups" :key="groupIndex">
+                    <div class="catalog-group">
+                        <!-- 有 section 的分组：可折叠 -->
+                        <template x-if="group.section">
+                            <div>
+                                <div @click="toggleSection(groupIndex)"
+                                     class="catalog-section-title">
+                                    <svg class="catalog-section-arrow" :class="group.expanded ? '' : 'collapsed'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                                    </svg>
+                                    <span x-text="group.section"></span>
+                                    <span class="catalog-section-count" x-text="'(' + group.chapters.length + ')'"></span>
+                                </div>
+                                <div x-show="group.expanded" class="catalog-section-chapters">
+                                    <template x-for="ch in group.chapters" :key="ch.id">
+                                        <button @click="navigateTo(ch.id); catalogOpen = false"
+                                                :class="activeChapterId === ch.id ? 'active' : ''"
+                                                class="catalog-item">
+                                            <span :id="'cat-dot-' + ch.id"
+                                                  :class="'catalog-dot dot-' + ch.status"></span>
+                                            <span class="catalog-title" x-text="ch.title"></span>
+                                        </button>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                        <!-- 无 section 的分组：直接显示，不折叠 -->
+                        <template x-if="!group.section">
+                            <div class="catalog-section-chapters">
+                                <template x-for="ch in group.chapters" :key="ch.id">
+                                    <button @click="navigateTo(ch.id); catalogOpen = false"
+                                            :class="activeChapterId === ch.id ? 'active' : ''"
+                                            class="catalog-item">
+                                        <span :id="'cat-dot-' + ch.id"
+                                              :class="'catalog-dot dot-' + ch.status"></span>
+                                        <span class="catalog-title" x-text="ch.title"></span>
+                                    </button>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
                 </template>
             </div>
         </div>
@@ -105,6 +138,7 @@
     <div class="reader-container py-8">
         <article class="chapter-card">
             <header class="chapter-header">
+                <div x-show="currentSection" class="chapter-section animate-fade-in" x-text="currentSection"></div>
                 <h2 class="chapter-title animate-fade-in" x-text="currentTitle"></h2>
                 <div class="flex items-center gap-2 mt-4">
                     <span id="active-status-badge"
@@ -177,6 +211,7 @@
             mode: 'zh',
             activeChapterId: null,
             currentTitle: '',
+            currentSection: '',
             hasPrev: false,
             hasNext: false,
             prevTitle: '',
@@ -184,6 +219,7 @@
             catalogOpen: false,
             chapterStatus: {},
             navVisible: true,
+            catalogGroups: [],
             _timer: null,
             _streaming: false,
             _lastScrollY: 0,
@@ -192,6 +228,8 @@
                 for (const ch of this.chapters) {
                     this.chapterStatus[ch.id] = ch;
                 }
+                // 初始化目录分组
+                this.buildCatalogGroups();
                 // Scroll hide/show toolbar
                 let ticking = false;
                 window.addEventListener('scroll', () => {
@@ -222,11 +260,56 @@
                 this.fetchStatus();
             },
 
+            buildCatalogGroups() {
+                const groups = [];
+                let currentGroup = null;
+                
+                for (const ch of this.chapters) {
+                    if (ch.section && (!currentGroup || currentGroup.section !== ch.section)) {
+                        // 遇到新的 section，创建新 group，默认折叠
+                        currentGroup = { section: ch.section, chapters: [], expanded: false };
+                        groups.push(currentGroup);
+                    } else if (!ch.section && !currentGroup) {
+                        // 第一个章节没有 section，创建无 section group
+                        currentGroup = { section: null, chapters: [], expanded: true };
+                        groups.push(currentGroup);
+                    }
+                    // 所有章节都添加到 currentGroup
+                    currentGroup.chapters.push(ch);
+                }
+                
+                this.catalogGroups = groups;
+                // 展开当前章节所在的 group
+                this.expandCurrentChapterGroup();
+            },
+
+            expandCurrentChapterGroup() {
+                if (!this.activeChapterId) return;
+                for (let i = 0; i < this.catalogGroups.length; i++) {
+                    const group = this.catalogGroups[i];
+                    if (group.chapters.some(ch => ch.id === this.activeChapterId)) {
+                        group.expanded = true;
+                        break;
+                    }
+                }
+            },
+
+            toggleSection(groupIndex) {
+                const group = this.catalogGroups[groupIndex];
+                if (group) {
+                    group.expanded = !group.expanded;
+                }
+            },
+
             navigateTo(id) {
                 if (this.activeChapterId === id) return;
                 this.activeChapterId = id;
                 const ch = this.chapters.find(c => c.id === id);
                 this.currentTitle = ch ? ch.title : '';
+                this.currentSection = ch ? (ch.section || '') : '';
+
+                // 展开当前章节所在的 group
+                this.expandCurrentChapterGroup();
 
                 // Save progress
                 if (ch) {
@@ -411,6 +494,11 @@
                     this.chapterStatus[chapterId].status = 'in_progress';
                 }
                 this.updateActiveBadge();
+                
+                // Start polling if not already running
+                if (!this._timer) {
+                    this._timer = setInterval(() => this.fetchStatus(), 3000);
+                }
                 if (container) {
                     container.innerHTML = `
                         <div class="flex flex-col items-center justify-center py-16 gap-4">
@@ -522,7 +610,7 @@
                     const res = await fetch('/api/chapter-status/' + this.bookId);
                     if (!res.ok) return;
                     const data = await res.json();
-                    let hasPending = false;
+                    let hasInProgress = false;
                     for (const ch of data.chapters) {
                         const prev = this.chapterStatus[ch.id];
                         this.chapterStatus[ch.id] = ch;
@@ -532,14 +620,14 @@
                                 this.loadChapter(ch.id);
                             }
                         }
-                        if (ch.status === 'pending' || ch.status === 'in_progress') {
-                            hasPending = true;
+                        if (ch.status === 'in_progress') {
+                            hasInProgress = true;
                         }
                     }
-                    if (!hasPending && this._timer) {
+                    if (!hasInProgress && this._timer) {
                         clearInterval(this._timer);
                         this._timer = null;
-                    } else if (hasPending && !this._timer) {
+                    } else if (hasInProgress && !this._timer) {
                         this._timer = setInterval(() => this.fetchStatus(), 3000);
                     }
                 } catch (e) { /* ignore */ }

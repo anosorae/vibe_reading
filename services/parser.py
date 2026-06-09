@@ -13,24 +13,29 @@ from models import Book, Chapter
 _MARKER_ONLY = re.compile(
     r"^第(?:[\u4e00-\u9fa5零一二三四五六七八九十百千万]+|\d+)[章回节卷]$"
     r"|^Chapter\s+\d+$"
-    r"|^CHAPTER\s+\d+$",
+    r"|^CHAPTER\s+\d+$"
+    r"|^\d+(?:\.\d+)?[：:]$",
     re.IGNORECASE,
 )
 CHAPTER_PATTERN = re.compile(
     r"^\s*(第(?:[\u4e00-\u9fa5零一二三四五六七八九十百千万]+|\d+)[章回节卷](?:\s+.+?)?)\s*$"
     r"|^\s*(Chapter\s+\d+.*)$"
-    r"|^\s*(CHAPTER\s+\d+.*)$",
+    r"|^\s*(CHAPTER\s+\d+.*)$"
+    r"|^\s*(\d+(?:\.\d+)?[：:].+)$",
     re.IGNORECASE,
 )
 
-# 篇级标记: 第X篇/第X卷 — 更大的结构单元, 不作为章节分割边界
+# 篇级标记: 第X篇/第X卷/卷X — 更大的结构单元, 不作为章节分割边界
 SECTION_PATTERN = re.compile(
-    r"^\s*(第(?:[\u4e00-\u9fa5零一二三四五六七八九十百千万]+|\d+)[篇](?:\s+.+?)?)\s*$"
+    r"^\s*(第(?:[\u4e00-\u9fa5零一二三四五六七八九十百千万]+|\d+)[篇卷](?:[：:].+|[\s\u4e00-\u9fa5].+)?)\s*$"
+    r"|^\s*(卷(?:[\u4e00-\u9fa5零一二三四五六七八九十百千万]+|\d+)(?:[：:].+|[\s\u4e00-\u9fa5].+)?)\s*$",
+    re.IGNORECASE,
 )
 
 
 class ChapterDict(TypedDict):
     title: str
+    section: str | None  # 卷/篇信息
     content: str
 
 
@@ -52,8 +57,8 @@ def parse_text(content: str) -> list[ChapterDict]:
     """
     解析纯文本:
     - 第X章/回/节/卷 作为章节分割边界, 整行作为标题
-    - 第X篇 作为更高级结构标记, 不分割章节
-    - 篇名会自动添加到其后第一个章节的标题前面 (如 "第一篇 一夜觉醒 / 第1章 罗峰")
+    - 第X篇/第X卷/卷X 作为更高级结构标记, 不分割章节
+    - 篇名会存入 section 字段, 与章节标题分开存储
     - 若标题行只有标记 (如"第一章"), 尝试用下一行非空文本作为标题补充
     - 前文作为独立"序章"章节
     - 若全文无章节标记, 则整本书归为一个"全文"章节
@@ -62,10 +67,11 @@ def parse_text(content: str) -> list[ChapterDict]:
     lines = content.splitlines()
     chapters: list[ChapterDict] = []
     current_title: str | None = None
+    current_section: str | None = None  # 当前章节的卷/篇信息
     current_lines: list[str] = []
     preamble_lines: list[str] = []
     found_chapter = False
-    pending_section: str | None = None  # 待合并到下一个章节标题的篇名
+    pending_section: str | None = None  # 待合并到下一个章节的篇名
 
     i = 0
     while i < len(lines):
@@ -88,11 +94,13 @@ def parse_text(content: str) -> list[ChapterDict]:
             if current_title is not None:
                 chapters.append({
                     "title": current_title,
+                    "section": current_section,
                     "content": _join_paragraphs(current_lines),
                 })
             elif preamble_lines:
                 chapters.append({
                     "title": "序章",
+                    "section": None,
                     "content": _join_paragraphs(preamble_lines),
                 })
                 preamble_lines = []
@@ -115,10 +123,12 @@ def parse_text(content: str) -> list[ChapterDict]:
                         title = f"{title} {next_line}"
                         i = peek
 
-            # 如果有待合并的篇名, 添加到标题前面
+            # 如果有待合并的篇名, 存入 section 字段
             if pending_section:
-                title = f"{pending_section} / {title}"
+                current_section = pending_section
                 pending_section = None
+            else:
+                current_section = None
 
             current_title = title
             current_lines = []
@@ -142,10 +152,11 @@ def parse_text(content: str) -> list[ChapterDict]:
     # 最后一章
     if current_title is not None:
         # 如果还有未合并的篇名, 也加上
-        if pending_section:
-            current_title = f"{pending_section} / {current_title}"
+        if pending_section and not current_section:
+            current_section = pending_section
         chapters.append({
             "title": current_title,
+            "section": current_section,
             "content": _join_paragraphs(current_lines),
         })
     elif not found_chapter and preamble_lines:
@@ -153,6 +164,7 @@ def parse_text(content: str) -> list[ChapterDict]:
         title = pending_section if pending_section else "全文"
         chapters.append({
             "title": title,
+            "section": None,
             "content": _join_paragraphs(preamble_lines),
         })
 
@@ -179,6 +191,7 @@ async def save_book_to_db(
             {
                 "book_id": book.id,
                 "title": ch["title"],
+                "section": ch.get("section"),
                 "chapter_index": idx,
                 "content": ch["content"],
                 "translated_content": None,

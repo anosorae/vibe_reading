@@ -37,6 +37,7 @@ class Chapter(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     book_id: Mapped[int] = mapped_column(ForeignKey("books.id", ondelete="CASCADE"))
     title: Mapped[str] = mapped_column(String(512))
+    section: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)  # 卷/篇信息
     chapter_index: Mapped[int] = mapped_column(Integer)
     content: Mapped[str] = mapped_column(Text, default="")
     translated_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

@@ -69,6 +69,7 @@ def _chapter_summary(ch: Chapter, prev_id: int | None, next_id: int | None) -> d
     return {
         "id": ch.id,
         "title": ch.title,
+        "section": ch.section,
         "status": _chapter_status_label(ch),
         "char_count": len(ch.content or ""),
         "prev_chapter_id": prev_id,
@@ -236,6 +237,7 @@ async def get_chapter(
     return {
         "id": chapter.id,
         "title": chapter.title,
+        "section": chapter.section,
         "content": chapter.content,
         "translated_content": chapter.translated_content,
         "status": _chapter_status_label(chapter),
