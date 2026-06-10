@@ -4,11 +4,11 @@
 
 <!-- Hero Section -->
 <div class="animate-fade-in-up mb-8">
-    <div class="text-center mb-2">
-        <h1 class="font-display text-4xl md:text-5xl font-semibold text-ink tracking-tight leading-tight">
+    <div class="text-center">
+        <h1 class="font-display text-4xl md:text-5xl font-semibold text-primary tracking-tight leading-tight">
             沉浸式阅读
         </h1>
-        <p class="font-body text-warm-gray mt-3 text-base max-w-md mx-auto leading-relaxed">
+        <p class="font-body text-secondary mt-3 text-base max-w-md mx-auto leading-relaxed">
             上传中文书籍，逐章翻译，在阅读中自然习得语言
         </p>
     </div>
@@ -18,8 +18,8 @@
 <div class="card animate-fade-in-up delay-1 px-6 py-4 mb-6">
     <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data"
           class="flex items-center gap-4">
-        <div class="shrink-0 w-9 h-9 rounded-lg bg-sienna/8 flex items-center justify-center">
-            <svg class="w-4.5 h-4.5 text-sienna" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+        <div class="shrink-0 w-9 h-9 rounded-lg bg-accent-subtle flex items-center justify-center">
+            <svg class="w-4.5 h-4.5 text-accent" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z"/>
             </svg>
         </div>
@@ -27,8 +27,8 @@
             <div class="upload-zone !p-3 !border-dashed" id="upload-zone">
                 <input type="file" name="file" accept=".txt" required id="file-input" />
                 <div class="flex items-center gap-2">
-                    <span class="text-sm text-stone" id="file-label">点击或拖拽 TXT 文件上传</span>
-                    <span class="text-sm text-sienna font-medium" id="file-name"></span>
+                    <span class="text-sm text-muted" id="file-label">点击或拖拽 TXT 文件上传</span>
+                    <span class="text-sm text-accent font-medium" id="file-name"></span>
                 </div>
             </div>
         </div>
@@ -45,7 +45,7 @@
         <svg class="w-5 h-5 text-sage shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
         </svg>
-        <span class="text-sm font-medium">已上传 <span class="font-semibold text-ink">{{ flash.title }}</span></span>
+        <span class="text-sm font-medium">已上传 <span class="font-semibold text-primary">{{ flash.title }}</span></span>
     </div>
     <a href="/read/{{ flash.id }}" class="btn btn-primary btn-sm">
         立即阅读
@@ -73,9 +73,9 @@
 <!-- Bookshelf -->
 <div class="card animate-fade-in-up delay-2 p-8">
     <div class="flex items-center justify-between mb-6">
-        <h2 class="font-display text-xl font-semibold text-ink">我的书架</h2>
+        <h2 class="font-display text-xl font-semibold text-primary">我的书架</h2>
         {% if books %}
-        <span class="font-mono text-xs text-stone">{{ books|length }} 本</span>
+        <span class="font-mono text-xs text-muted">{{ books|length }} 本</span>
         {% endif %}
     </div>
 
@@ -87,28 +87,28 @@
                 <span class="book-icon-text">{{ book.title[:2] }}</span>
             </div>
             <div class="flex-1 min-w-0">
-                <a href="/read/{{ book.id }}" class="font-display text-lg font-semibold text-ink hover:text-sienna transition-colors block truncate">
+                <a href="/read/{{ book.id }}" class="font-display text-lg font-semibold text-primary hover-text-accent transition-colors block truncate">
                     {{ book.title }}
                 </a>
                 <div class="flex items-center gap-3 mt-1.5">
-                    <span class="text-xs text-stone">
+                    <span class="text-xs text-muted">
                         {{ book.total_chapters }} 章
                     </span>
                     <span class="w-0.5 h-0.5 rounded-full bg-sand"></span>
-                    <span class="text-xs text-stone">
+                    <span class="text-xs text-muted">
                         已译 {{ book.translated_chapters }}
                     </span>
                     <span class="w-0.5 h-0.5 rounded-full bg-sand"></span>
-                    <span class="text-xs text-stone">
+                    <span class="text-xs text-muted">
                         {{ book.created_at.strftime('%Y.%m.%d') }}
                     </span>
                 </div>
                 {% if book.last_read_title %}
                 <div class="flex items-center gap-1.5 mt-1.5">
-                    <svg class="w-3 h-3 text-sienna" fill="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-3 h-3 text-accent" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z"/>
                     </svg>
-                    <span class="text-xs text-sienna font-medium">读到: {{ book.last_read_title }}</span>
+                    <span class="text-xs text-accent font-medium">读到: {{ book.last_read_title }}</span>
                 </div>
                 {% endif %}
             </div>
@@ -136,7 +136,7 @@
     <div class="empty-state">
         <div class="empty-state-icon">📖</div>
         <p class="empty-state-text">书架空空如也</p>
-        <p class="text-sm text-stone mt-2">上传你的第一本 TXT 开始阅读之旅</p>
+        <p class="text-sm text-muted mt-2">上传你的第一本 TXT 开始阅读之旅</p>
     </div>
     {% endif %}
 </div>
@@ -183,6 +183,8 @@
             }
         });
     }
+
+
 </script>
 
 {% endblock %}
