@@ -393,8 +393,7 @@ async def test_llm_connection():
             max_tokens=5,
             temperature=0,
         )
-        if config["is_deepseek"]:
-            create_kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+        create_kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
         response = await client.chat.completions.create(**create_kwargs)
         return {"ok": True, "model": model}
     except APIError as exc:

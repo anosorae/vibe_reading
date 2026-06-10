@@ -13,6 +13,10 @@ DEFAULTS = {
     "api_base": "https://api.deepseek.com",
     "model": "deepseek-v4-flash",
     "chapter_max_chars": 20000,
+    "enable_context_boost": False,
+    "context_chapters": 1,
+    "context_max_chars": 30000,
+    "enable_thinking": False,
 }
 
 
@@ -45,12 +49,20 @@ def get_llm_config() -> dict:
     """返回完整的 LLM 配置, 供 translator 使用。"""
     s = load_settings()
     api_base = s.get("api_base", DEFAULTS["api_base"]).rstrip("/")
+    context_chapters = int(s.get("context_chapters", DEFAULTS["context_chapters"]))
+    if context_chapters < 1:
+        context_chapters = 1
+    elif context_chapters > 3:
+        context_chapters = 3
     return {
         "api_key": s.get("api_key", DEFAULTS["api_key"]),
         "api_base": api_base,
         "model": s.get("model", DEFAULTS["model"]),
         "chapter_max_chars": int(s.get("chapter_max_chars", DEFAULTS["chapter_max_chars"])),
-        "is_deepseek": "deepseek" in api_base.lower(),
+        "enable_context_boost": bool(s.get("enable_context_boost", DEFAULTS["enable_context_boost"])),
+        "context_chapters": context_chapters,
+        "context_max_chars": int(s.get("context_max_chars", DEFAULTS["context_max_chars"])),
+        "enable_thinking": bool(s.get("enable_thinking", DEFAULTS["enable_thinking"])),
     }
 
 

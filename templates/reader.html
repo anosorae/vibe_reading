@@ -218,6 +218,47 @@
                            min="1000" max="200000" step="1000"
                            placeholder="20000">
                 </div>
+                <div class="settings-field">
+                    <label class="settings-label">上下文增强翻译</label>
+                    <div class="settings-hint">开启后翻译时会参考前几章的译文，提升风格一致性</div>
+                    <div class="settings-toggle" :class="llmConfig.enable_context_boost ? 'on' : ''"
+                         @click="llmConfig.enable_context_boost = !llmConfig.enable_context_boost">
+                        <div class="settings-toggle-track">
+                            <div class="settings-toggle-thumb"></div>
+                        </div>
+                        <span class="settings-toggle-label" x-text="llmConfig.enable_context_boost ? '已开启' : '已关闭'"></span>
+                    </div>
+                </div>
+                <template x-if="llmConfig.enable_context_boost">
+                    <div>
+                        <div class="settings-field">
+                            <label class="settings-label">上下文章节数</label>
+                            <input type="number" class="settings-input"
+                                   x-model.number="llmConfig.context_chapters"
+                                   min="1" max="3" step="1"
+                                   placeholder="1">
+                        </div>
+                        <div class="settings-field">
+                            <label class="settings-label">输入总字符上限</label>
+                            <div class="settings-hint">上下文 + 当前章节的总字符上限</div>
+                            <input type="number" class="settings-input"
+                                   x-model.number="llmConfig.context_max_chars"
+                                   min="5000" max="500000" step="1000"
+                                   placeholder="30000">
+                        </div>
+                    </div>
+                </template>
+                <div class="settings-field">
+                    <label class="settings-label">思考模式</label>
+                    <div class="settings-hint">深度推理模式，可提升翻译质量，但消耗更多 token</div>
+                    <div class="settings-toggle" :class="llmConfig.enable_thinking ? 'on' : ''"
+                         @click="llmConfig.enable_thinking = !llmConfig.enable_thinking">
+                        <div class="settings-toggle-track">
+                            <div class="settings-toggle-thumb"></div>
+                        </div>
+                        <span class="settings-toggle-label" x-text="llmConfig.enable_thinking ? '已开启' : '已关闭'"></span>
+                    </div>
+                </div>
                 <div class="settings-actions">
                     <button type="button" @click="saveLlmSettings()"
                             class="btn btn-primary btn-sm"
@@ -384,7 +425,12 @@
             // Settings
             settingsOpen: false,
             settingsTab: 'llm',
-            llmConfig: { api_key: '', api_base: 'https://api.deepseek.com', model: 'deepseek-v4-flash', chapter_max_chars: 20000 },
+            llmConfig: {
+                api_key: '', api_base: 'https://api.deepseek.com', model: 'deepseek-v4-flash',
+                chapter_max_chars: 20000,
+                enable_context_boost: false, context_chapters: 1, context_max_chars: 30000,
+                enable_thinking: false,
+            },
             llmSaving: false,
             llmTesting: false,
             llmTestResult: null,
@@ -511,6 +557,10 @@
                             api_base: data.api_base || 'https://api.deepseek.com',
                             model: data.model || 'deepseek-v4-flash',
                             chapter_max_chars: data.chapter_max_chars || 20000,
+                            enable_context_boost: !!data.enable_context_boost,
+                            context_chapters: data.context_chapters || 1,
+                            context_max_chars: data.context_max_chars || 30000,
+                            enable_thinking: !!data.enable_thinking,
                         };
                     }
                 } catch (e) { /* ignore */ }

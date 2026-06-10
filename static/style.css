@@ -1098,6 +1098,59 @@ body::before {
     color: var(--color-red-muted);
 }
 
+/* Toggle switch */
+.settings-hint {
+    font-family: var(--font-ui);
+    font-size: 0.75rem;
+    color: var(--color-stone);
+    margin-bottom: 0.5rem;
+    line-height: 1.4;
+}
+
+.settings-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.625rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.settings-toggle-track {
+    width: 36px;
+    height: 20px;
+    background: var(--color-sand);
+    border-radius: 10px;
+    position: relative;
+    transition: background var(--duration-fast) ease;
+    flex-shrink: 0;
+}
+
+.settings-toggle-thumb {
+    width: 16px;
+    height: 16px;
+    background: white;
+    border-radius: 50%;
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    transition: transform var(--duration-fast) var(--ease-out-back);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.settings-toggle.on .settings-toggle-track {
+    background: var(--color-sienna);
+}
+
+.settings-toggle.on .settings-toggle-thumb {
+    transform: translateX(16px);
+}
+
+.settings-toggle-label {
+    font-family: var(--font-ui);
+    font-size: 0.8125rem;
+    color: var(--color-warm-gray);
+}
+
 /* Reading style controls */
 .settings-range-row {
     display: flex;

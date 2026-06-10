@@ -4,7 +4,7 @@
 设计要点:
   - 粒度: 一章 = 一次 API 调用
   - 输出: 中文段落 + 分隔线 + 英文段落 (双语对照)
-  - 上下文: 上一章双语译文 (超 30K 字符则取头尾各半)
+  - 上下文: 可选, 前 N 章译文 (总字符受 context_max_chars 限制)
   - 超长拒绝: 单章字符 > CHAPTER_MAX_CHARS 直接拒绝, 标记 chapter.status=3
   - 客户端: openai.AsyncOpenAI (官方 SDK, OpenAI 兼容格式)
   - 流式输出: translate_chapter_stream() 逐 token 输出, 前端实时显示
@@ -20,8 +20,6 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
 from models import Book, Chapter
 from services.settings import get_llm_config
-
-PREV_CHAPTER_MAX_CHARS: int = 30000
 
 STATUS_TOO_LONG = 3
 
@@ -62,22 +60,36 @@ def _truncate_middle(text: str, limit: int) -> str:
     return f"{text[:half]}\n\n[... middle truncated ...]\n\n{text[-half:]}"
 
 
-async def _load_prev_chapter_english(
+async def _load_prev_chapters_english(
     session: AsyncSession,
     book_id: int,
     chapter_index: int,
+    count: int,
+    available_chars: int,
 ) -> Optional[str]:
-    if chapter_index <= 0:
+    """加载前 count 章译文, 按时间顺序拼接, 总字符截断到 available_chars。"""
+    if chapter_index <= 0 or count <= 0 or available_chars <= 0:
         return None
-    stmt = select(Chapter.translated_content).where(
-        Chapter.book_id == book_id,
-        Chapter.chapter_index == chapter_index - 1,
-        Chapter.status == 2,
-    )
-    result = (await session.execute(stmt)).scalar_one_or_none()
-    if not result:
+    parts = []
+    for i in range(1, count + 1):
+        idx = chapter_index - i
+        if idx < 0:
+            break
+        stmt = select(Chapter.translated_content).where(
+            Chapter.book_id == book_id,
+            Chapter.chapter_index == idx,
+            Chapter.status == 2,
+        )
+        result = (await session.execute(stmt)).scalar_one_or_none()
+        if result:
+            parts.append(result)
+    if not parts:
         return None
-    return _truncate_middle(result, PREV_CHAPTER_MAX_CHARS)
+    combined = "\n\n---\n\n".join(reversed(parts))
+    if len(combined) > available_chars:
+        half = available_chars // 2
+        combined = f"{combined[:half]}\n\n[... middle truncated ...]\n\n{combined[-half:]}"
+    return combined
 
 
 async def translate_chapter(
@@ -96,7 +108,10 @@ async def translate_chapter(
     api_base = config["api_base"]
     model = config["model"]
     chapter_max_chars = config["chapter_max_chars"]
-    is_deepseek = config["is_deepseek"]
+    enable_context_boost = config["enable_context_boost"]
+    context_chapters = config["context_chapters"]
+    context_max_chars = config["context_max_chars"]
+    enable_thinking = config["enable_thinking"]
 
     # 1) 加载章节
     async with session_maker() as s:
@@ -129,9 +144,16 @@ async def translate_chapter(
         ch.status = 1
         await s.commit()
 
-    # 4) 加载上一章英译 (上下文)
-    async with session_maker() as s:
-        prev_english = await _load_prev_chapter_english(s, book_id, chapter_index)
+    # 4) 加载上下文
+    prev_english = None
+    if enable_context_boost:
+        budget = context_max_chars - char_count
+        if budget > 0:
+            async with session_maker() as s:
+                prev_english = await _load_prev_chapters_english(
+                    s, book_id, chapter_index,
+                    context_chapters, budget,
+                )
 
     # 5) 构造 prompt
     user_prompt = _build_user_prompt(
@@ -156,8 +178,9 @@ async def translate_chapter(
             temperature=0.3,
             max_tokens=16000,
         )
-        if is_deepseek:
-            create_kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+        create_kwargs["extra_body"] = {
+            "thinking": {"type": "enabled" if enable_thinking else "disabled"}
+        }
         response = await client.chat.completions.create(**create_kwargs)
         translated_text = (response.choices[0].message.content or "").strip()
     except APIError as exc:
@@ -219,7 +242,10 @@ async def translate_chapter_stream(
     api_base = config["api_base"]
     model = config["model"]
     chapter_max_chars = config["chapter_max_chars"]
-    is_deepseek = config["is_deepseek"]
+    enable_context_boost = config["enable_context_boost"]
+    context_chapters = config["context_chapters"]
+    context_max_chars = config["context_max_chars"]
+    enable_thinking = config["enable_thinking"]
 
     def _emit(event: dict) -> str:
         return json.dumps(event, ensure_ascii=False)
@@ -260,9 +286,16 @@ async def translate_chapter_stream(
 
     yield _emit({"type": "status", "status": "started", "char_count": char_count})
 
-    # 4) 加载上一章英译 (上下文)
-    async with session_maker() as s:
-        prev_english = await _load_prev_chapter_english(s, book_id, chapter_index)
+    # 4) 加载上下文
+    prev_english = None
+    if enable_context_boost:
+        budget = context_max_chars - char_count
+        if budget > 0:
+            async with session_maker() as s:
+                prev_english = await _load_prev_chapters_english(
+                    s, book_id, chapter_index,
+                    context_chapters, budget,
+                )
 
     # 5) 构造 prompt
     user_prompt = _build_user_prompt(
@@ -288,8 +321,9 @@ async def translate_chapter_stream(
             max_tokens=16000,
             stream=True,
         )
-        if is_deepseek:
-            create_kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+        create_kwargs["extra_body"] = {
+            "thinking": {"type": "enabled" if enable_thinking else "disabled"}
+        }
 
         stream = await client.chat.completions.create(**create_kwargs)
         full_text = ""
