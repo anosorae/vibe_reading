@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ book.title }} — Vibe Reading{% endblock %}
+{% block title %}Vibe Reading — {{ book.title }}{% endblock %}
 {% block nav %}{% endblock %}
 
 {% block head_extra %}
@@ -412,7 +412,7 @@
             bookId: window.VIBE_READING.bookId,
             chapterMaxChars: window.VIBE_READING.chapterMaxChars,
             chapters: window.VIBE_READING.chapters,
-            mode: 'zh',
+            mode: localStorage.getItem('vibe_reading_mode') || 'zh',
             activeChapterId: null,
             currentTitle: '',
             currentSection: '',
@@ -439,8 +439,7 @@
             showApiKey: false,
             readingPrefs: { fontSize: 17, fontFamily: 'lora', bgColor: '#FAF7F2' },
             _timer: null,
-            _streaming: false,
-            _abortController: null,
+            _streamControllers: {},
             _lastScrollY: 0,
             _apiKeyChecked: false,
             _hasApiKey: false,
@@ -654,12 +653,6 @@
 
             navigateTo(id) {
                 if (this.activeChapterId === id) return;
-                // 导航到其他章节时中止当前正在进行的翻译流
-                if (this._abortController) {
-                    this._abortController.abort();
-                    this._abortController = null;
-                }
-                this._streaming = false;
                 this.activeChapterId = id;
                 const ch = this.chapters.find(c => c.id === id);
                 this.currentTitle = ch ? ch.title : '';
@@ -716,6 +709,7 @@
             switchMode(m) {
                 if (this.mode === m) return;
                 this.mode = m;
+                localStorage.setItem('vibe_reading_mode', m);
                 const id = this.activeChapterId;
                 if (id) {
                     this.loadChapter(id);
@@ -848,36 +842,31 @@
             },
 
             async translateChapter(chapterId) {
-                // 中止任何正在进行的翻译流（例如卡在 in_progress 的情况）
-                if (this._abortController) {
-                    this._abortController.abort();
-                    this._abortController = null;
-                }
-                this._streaming = false;
                 if (!this._hasApiKey) {
                     this._promptApiKey();
                     return;
                 }
-                this._streaming = true;
+                // 如果同一章已有流在跑（重试场景），先中止旧流
+                if (this._streamControllers[chapterId]) {
+                    this._streamControllers[chapterId].abort();
+                    delete this._streamControllers[chapterId];
+                }
+
+                const isActive = () => this.activeChapterId === chapterId;
                 const container = document.getElementById('chapter-body');
 
                 // Reset chapter status
                 await fetch('/api/reset-chapter/' + chapterId, { method: 'POST' });
                 if (this.chapterStatus[chapterId]) {
-                    this.chapterStatus[chapterId].status = 'pending';
-                }
-
-                // Mark as in progress
-                if (this.chapterStatus[chapterId]) {
                     this.chapterStatus[chapterId].status = 'in_progress';
                 }
                 this.updateActiveBadge();
-                
+
                 // Start polling if not already running
                 if (!this._timer) {
                     this._timer = setInterval(() => this.fetchStatus(), 3000);
                 }
-                if (container) {
+                if (isActive() && container) {
                     container.innerHTML = `
                         <div class="flex flex-col items-center justify-center py-16 gap-4">
                             <div class="relative w-12 h-12">
@@ -891,10 +880,11 @@
                         </div>`;
                 }
 
-                this._abortController = new AbortController();
+                const controller = new AbortController();
+                this._streamControllers[chapterId] = controller;
                 let accumulated = '';
                 try {
-                    const res = await fetch('/translate/stream/' + chapterId, { method: 'POST', signal: this._abortController.signal });
+                    const res = await fetch('/translate/stream/' + chapterId, { method: 'POST', signal: controller.signal });
                     if (!res.ok) {
                         const err = await res.json().catch(() => ({}));
                         throw new Error(err.detail || err.reason || 'HTTP ' + res.status);
@@ -917,7 +907,7 @@
 
                             if (evt.type === 'chunk') {
                                 accumulated += evt.text;
-                                if (container) {
+                                if (isActive() && container) {
                                     container.innerHTML = `
                                         <div class="font-body text-charcoal leading-relaxed whitespace-pre-wrap text-[0.9375rem]">${escapeHtml(accumulated)}</div>
                                         <div class="mt-4 pt-4 border-t border-divider">
@@ -933,33 +923,23 @@
                         }
                     }
 
-                    this._streaming = false;
-                    this._abortController = null;
                     if (this.chapterStatus[chapterId]) {
                         this.chapterStatus[chapterId].status = 'done';
                     }
                     this.updateBadge(this.chapterStatus[chapterId]);
                     await this.fetchStatus();
-                    if (this.activeChapterId === chapterId) {
+                    if (isActive()) {
                         this.loadChapter(chapterId);
                     }
 
                 } catch (e) {
-                    if (e.name === 'AbortError') {
-                        // 用户导航到其他章节，正常中止；_streaming 由 navigateTo 管理
-                        if (this.chapterStatus[chapterId]) {
-                            this.chapterStatus[chapterId].status = 'failed';
-                        }
-                        return;
-                    }
+                    if (e.name === 'AbortError') return;
                     console.error('translateChapter failed:', e);
-                    this._streaming = false;
-                    this._abortController = null;
                     if (this.chapterStatus[chapterId]) {
                         this.chapterStatus[chapterId].status = 'failed';
                     }
                     this.updateBadge(this.chapterStatus[chapterId]);
-                    if (container && this.activeChapterId === chapterId) {
+                    if (isActive() && container) {
                         container.innerHTML = `
                             <div class="flex flex-col items-center justify-center py-16 gap-3">
                                 <svg class="w-8 h-8 text-red-muted" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
@@ -968,13 +948,15 @@
                                 <span class="text-sm text-red-muted">翻译失败: ${escapeHtml(e.message)}</span>
                             </div>`;
                     }
+                } finally {
+                    delete this._streamControllers[chapterId];
                 }
             },
 
             maybeTranslateNext(chapterId) {
                 if (chapterId == null) return;
                 if (this.mode === 'zh') return;
-                if (this._streaming) return;
+                if (this._streamControllers[chapterId]) return;
                 if (!this._hasApiKey) return;
                 const ch = this.chapterStatus[chapterId];
                 if (!ch) return;
@@ -986,7 +968,7 @@
 
             maybeTranslateChapter(chapterId) {
                 if (chapterId == null) return;
-                if (this._streaming) return;
+                if (this._streamControllers[chapterId]) return;
                 if (!this._hasApiKey) return;
                 const ch = this.chapterStatus[chapterId];
                 if (!ch) return;
