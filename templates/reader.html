@@ -516,9 +516,7 @@
                 } catch (e) { /* ignore */ }
             },
 
-            async saveLlmSettings() {
-                this.llmSaving = true;
-                this.llmTestResult = null;
+            async _doSaveLlmSettings() {
                 try {
                     const res = await fetch('/api/settings', {
                         method: 'POST',
@@ -528,19 +526,29 @@
                     if (res.ok) {
                         this.chapterMaxChars = this.llmConfig.chapter_max_chars;
                         this._hasApiKey = !!(this.llmConfig.api_key && this.llmConfig.api_key.length > 0);
-                        this.settingsOpen = false;
-                        if (this._hasApiKey && this.mode !== 'zh' && this.activeChapterId) {
-                            this.maybeTranslateChapter(this.activeChapterId);
-                        }
+                        return true;
                     }
                 } catch (e) { /* ignore */ }
+                return false;
+            },
+
+            async saveLlmSettings() {
+                this.llmSaving = true;
+                this.llmTestResult = null;
+                const ok = await this._doSaveLlmSettings();
                 this.llmSaving = false;
+                if (ok) {
+                    this.settingsOpen = false;
+                    if (this._hasApiKey && this.mode !== 'zh' && this.activeChapterId) {
+                        this.maybeTranslateChapter(this.activeChapterId);
+                    }
+                }
             },
 
             async testLlmConnection() {
                 this.llmTesting = true;
                 this.llmTestResult = null;
-                await this.saveLlmSettings();
+                await this._doSaveLlmSettings();
                 try {
                     const res = await fetch('/api/settings/test-llm', { method: 'POST' });
                     this.llmTestResult = await res.json();
@@ -864,7 +872,7 @@
                     if (this.chapterStatus[chapterId]) {
                         this.chapterStatus[chapterId].status = 'done';
                     }
-                    this.updateActiveBadge();
+                    this.updateBadge(this.chapterStatus[chapterId]);
                     await this.fetchStatus();
                     this.loadChapter(chapterId);
 
@@ -874,7 +882,7 @@
                     if (this.chapterStatus[chapterId]) {
                         this.chapterStatus[chapterId].status = 'failed';
                     }
-                    this.updateActiveBadge();
+                    this.updateBadge(this.chapterStatus[chapterId]);
                     if (container) {
                         container.innerHTML = `
                             <div class="flex flex-col items-center justify-center py-16 gap-3">
