@@ -19,13 +19,15 @@ from fastapi import (
 from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from openai import APIError, AsyncOpenAI
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import async_session_maker, get_session, init_db
 from models import Book, Chapter
 from services.parser import parse_text, save_book_to_db
-from services.translator import CHAPTER_MAX_CHARS, translate_chapter_stream
+from services.settings import get_llm_config, load_settings, mask_api_key, save_settings
+from services.translator import translate_chapter_stream
 
 
 BASE_DIR = Path(__file__).parent
@@ -51,7 +53,8 @@ templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 def _chapter_status_label(chapter: Chapter) -> str:
     """根据 Chapter.status 返回状态字符串。"""
-    if len(chapter.content or "") > CHAPTER_MAX_CHARS:
+    max_chars = get_llm_config()["chapter_max_chars"]
+    if len(chapter.content or "") > max_chars:
         return "too_long"
     if not chapter.content:
         return "empty"
@@ -206,6 +209,7 @@ async def read(
         for i, ch in enumerate(chapters)
     ]
 
+    chapter_max_chars = get_llm_config()["chapter_max_chars"]
     return templates.TemplateResponse(
         request,
         "reader.html",
@@ -213,7 +217,7 @@ async def read(
             "request": request,
             "book": book,
             "chapters": chapter_list,
-            "chapter_max_chars": CHAPTER_MAX_CHARS,
+            "chapter_max_chars": chapter_max_chars,
         },
     )
 
@@ -338,6 +342,65 @@ async def reset_chapter(
     chapter.status = 0
     await session.commit()
     return {"ok": True}
+
+
+# ---------------------- 设置 API ----------------------
+
+@app.get("/api/settings")
+async def get_settings():
+    """返回当前设置 (API Key 脱敏)。"""
+    s = load_settings()
+    return {
+        "api_key": mask_api_key(s.get("api_key", "")),
+        "api_base": s.get("api_base", ""),
+        "model": s.get("model", ""),
+        "chapter_max_chars": s.get("chapter_max_chars", 20000),
+    }
+
+
+@app.post("/api/settings")
+async def update_settings(request: Request):
+    """保存 LLM 设置。"""
+    body = await request.json()
+    s = load_settings()
+
+    api_key = body.get("api_key", "")
+    # 如果前端提交的是脱敏值 (sk-***xxx), 则不覆盖
+    masked = mask_api_key(s.get("api_key", ""))
+    if api_key == masked:
+        body.pop("api_key", None)
+
+    save_settings(body)
+    return {"ok": True}
+
+
+@app.post("/api/settings/test-llm")
+async def test_llm_connection():
+    """测试当前 LLM 配置是否可用。"""
+    config = get_llm_config()
+    api_key = config["api_key"]
+    api_base = config["api_base"]
+    model = config["model"]
+
+    if not api_key:
+        return {"ok": False, "reason": "API Key 未配置"}
+
+    try:
+        client = AsyncOpenAI(api_key=api_key, base_url=api_base, timeout=30.0)
+        create_kwargs = dict(
+            model=model,
+            messages=[{"role": "user", "content": "Reply with exactly: ok"}],
+            max_tokens=5,
+            temperature=0,
+        )
+        if config["is_deepseek"]:
+            create_kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+        response = await client.chat.completions.create(**create_kwargs)
+        return {"ok": True, "model": model}
+    except APIError as exc:
+        return {"ok": False, "reason": f"API 错误: {exc.message}"}
+    except Exception as exc:
+        return {"ok": False, "reason": str(exc)}
 
 
 # ---------------------- 一键启动 ----------------------

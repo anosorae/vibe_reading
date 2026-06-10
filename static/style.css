@@ -29,6 +29,11 @@
     --color-blue-muted:   #5B7FA8;
     --color-blue-light:   #EAF0F7;
 
+    /* Reader customizable */
+    --reader-font-size: 17px;
+    --reader-font-family: 'Lora', 'Noto Serif SC', Georgia, serif;
+    --reader-bg: #FAF7F2;
+
     /* Typography */
     --font-display: 'Cormorant Garamond', 'Noto Serif SC', Georgia, serif;
     --font-body:    'Lora', 'Noto Serif SC', Georgia, serif;
@@ -533,7 +538,7 @@ body::before {
 }
 
 .chapter-card {
-    background: var(--color-parchment);
+    background: var(--reader-bg);
     border: none;
     border-radius: 20px;
     box-shadow:
@@ -608,19 +613,19 @@ body::before {
 
 /* Reading paragraphs */
 .para-zh {
-    font-family: var(--font-body);
+    font-family: var(--reader-font-family);
     color: var(--color-ink);
     line-height: 2;
-    font-size: 1.0625rem;
+    font-size: var(--reader-font-size);
     margin-bottom: 1rem;
     text-indent: 2em;
 }
 
 .para-en {
-    font-family: var(--font-body);
+    font-family: var(--reader-font-family);
     color: var(--color-charcoal);
     line-height: 1.95;
-    font-size: 1rem;
+    font-size: calc(var(--reader-font-size) * 0.9375);
     margin-bottom: 0.5rem;
     cursor: pointer;
     transition: color var(--duration-fast) ease;
@@ -650,10 +655,10 @@ body::before {
 }
 
 .para-original {
-    font-family: var(--font-body);
+    font-family: var(--reader-font-family);
     color: var(--color-stone);
     line-height: 1.8;
-    font-size: 0.9375rem;
+    font-size: calc(var(--reader-font-size) * 0.875);
     margin-bottom: 1.25rem;
     padding-left: 1.25rem;
     border-left: 2px solid rgba(217, 208, 195, 0.6);
@@ -961,4 +966,298 @@ body::before {
     .chapter-title {
         font-size: 1.375rem;
     }
+}
+
+/* --- Settings Modal --- */
+.settings-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--color-linen);
+    padding: 0 1.5rem;
+}
+
+.settings-tab {
+    font-family: var(--font-ui);
+    font-size: 0.875rem;
+    font-weight: 500;
+    padding: 0.75rem 1.25rem;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: var(--color-stone);
+    position: relative;
+    transition: color var(--duration-fast) ease;
+}
+
+.settings-tab:hover {
+    color: var(--color-charcoal);
+}
+
+.settings-tab.active {
+    color: var(--color-sienna);
+}
+
+.settings-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--color-sienna);
+    border-radius: 1px 1px 0 0;
+}
+
+.settings-section {
+    padding: 1.25rem 1.5rem;
+}
+
+.settings-field {
+    margin-bottom: 1rem;
+}
+
+.settings-field:last-child {
+    margin-bottom: 0;
+}
+
+.settings-label {
+    display: block;
+    font-family: var(--font-ui);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-warm-gray);
+    margin-bottom: 0.375rem;
+}
+
+.settings-input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-sand);
+    border-radius: 8px;
+    font-family: var(--font-ui);
+    font-size: 0.875rem;
+    color: var(--color-charcoal);
+    background: white;
+    transition: border-color var(--duration-fast) ease, box-shadow var(--duration-fast) ease;
+    outline: none;
+}
+
+.settings-input:focus {
+    border-color: var(--color-sienna);
+    box-shadow: 0 0 0 3px rgba(184, 92, 56, 0.1);
+}
+
+.settings-input-group {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
+.settings-input-group .settings-input {
+    border-radius: 8px 0 0 8px;
+}
+
+.settings-input-group .btn {
+    border-radius: 0 8px 8px 0;
+    border-left: 1px solid var(--color-sand);
+    padding: 0.5rem 0.75rem;
+    flex-shrink: 0;
+}
+
+.settings-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-linen);
+}
+
+.settings-actions .btn {
+    flex: 1;
+    justify-content: center;
+}
+
+.test-result {
+    margin-top: 0.75rem;
+    padding: 0.625rem 0.875rem;
+    border-radius: 8px;
+    font-family: var(--font-ui);
+    font-size: 0.8125rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    animation: fadeIn var(--duration-normal) ease;
+}
+
+.test-success {
+    background: var(--color-sage-light);
+    color: var(--color-sage);
+}
+
+.test-error {
+    background: var(--color-red-light);
+    color: var(--color-red-muted);
+}
+
+/* Reading style controls */
+.settings-range-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.settings-slider {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    background: var(--color-linen);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+
+.settings-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--color-sienna);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(184, 92, 56, 0.3);
+    transition: transform var(--duration-fast) ease;
+}
+
+.settings-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.15);
+}
+
+.settings-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: var(--color-sienna);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 1px 4px rgba(184, 92, 56, 0.3);
+}
+
+.settings-range-value {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: var(--color-warm-gray);
+    min-width: 2.5rem;
+    text-align: right;
+}
+
+.settings-select {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-sand);
+    border-radius: 8px;
+    font-family: var(--font-ui);
+    font-size: 0.875rem;
+    color: var(--color-charcoal);
+    background: white;
+    cursor: pointer;
+    outline: none;
+    transition: border-color var(--duration-fast) ease;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236B635B' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    padding-right: 2rem;
+}
+
+.settings-select:focus {
+    border-color: var(--color-sienna);
+    box-shadow: 0 0 0 3px rgba(184, 92, 56, 0.1);
+}
+
+.color-options {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.color-swatch {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: all var(--duration-fast) ease;
+    position: relative;
+}
+
+.color-swatch:hover {
+    transform: scale(1.1);
+}
+
+.color-swatch.active {
+    border-color: var(--color-sienna);
+    box-shadow: 0 0 0 2px var(--color-cream), 0 0 0 4px var(--color-sienna);
+}
+
+.color-swatch-label {
+    position: absolute;
+    bottom: -1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--font-ui);
+    font-size: 0.625rem;
+    color: var(--color-stone);
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity var(--duration-fast) ease;
+    pointer-events: none;
+}
+
+.color-swatch:hover .color-swatch-label {
+    opacity: 1;
+}
+
+/* Dark background mode for reader */
+body.reader-dark .para-zh,
+body.reader-dark .para-en {
+    color: #E8E2DA;
+}
+
+body.reader-dark .para-original {
+    color: #9B9389;
+    border-left-color: rgba(155, 147, 137, 0.4);
+}
+
+body.reader-dark .chapter-header {
+    border-bottom-color: rgba(155, 147, 137, 0.3);
+}
+
+body.reader-dark .chapter-section {
+    color: var(--color-sienna-light);
+}
+
+body.reader-dark .chapter-title {
+    color: #E8E2DA;
+}
+
+body.reader-dark .chapter-footer {
+    border-top-color: rgba(155, 147, 137, 0.3);
+}
+
+body.reader-dark .chapter-nav-link {
+    color: var(--color-stone);
+}
+
+body.reader-dark .chapter-nav-link:hover {
+    color: var(--color-sienna-light);
+}
+
+body.reader-dark .chapter-card::before {
+    background: linear-gradient(
+        180deg,
+        rgba(44, 40, 37, 0.3) 0%,
+        rgba(44, 40, 37, 0.1) 40%,
+        transparent 100%
+    );
 }

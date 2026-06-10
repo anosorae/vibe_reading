@@ -62,6 +62,15 @@
                     </svg>
                     <span class="hidden sm:inline">目录</span>
                 </button>
+                <div class="toolbar-divider"></div>
+                <button type="button" @click="openSettings()"
+                        class="btn btn-ghost btn-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                    <span class="hidden sm:inline">设置</span>
+                </button>
             </div>
         </div>
     </div>
@@ -136,6 +145,165 @@
         </div>
     </div>
 
+    <!-- Settings Modal -->
+    <div x-show="settingsOpen"
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         @keydown.escape.window="settingsOpen = false"
+         class="modal-overlay" style="display:none">
+        <div class="absolute inset-0" @click="settingsOpen = false"></div>
+        <div class="modal-content animate-scale-in"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 scale-95 translate-y-4"
+             x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+             style="max-width: 26rem;">
+            <div class="modal-header">
+                <h2 class="modal-title">设置</h2>
+                <button @click="settingsOpen = false" class="btn btn-ghost btn-sm p-1.5">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="settings-tabs">
+                <button @click="settingsTab = 'llm'"
+                        :class="settingsTab === 'llm' ? 'active' : ''"
+                        class="settings-tab">LLM 设置</button>
+                <button @click="settingsTab = 'reading'"
+                        :class="settingsTab === 'reading' ? 'active' : ''"
+                        class="settings-tab">阅读样式</button>
+            </div>
+
+            <!-- LLM Settings -->
+            <div x-show="settingsTab === 'llm'" class="settings-section">
+                <div class="settings-field">
+                    <label class="settings-label">API Key</label>
+                    <div class="settings-input-group">
+                        <input :type="showApiKey ? 'text' : 'password'"
+                               class="settings-input"
+                               x-model="llmConfig.api_key"
+                               placeholder="sk-...">
+                        <button type="button" @click="showApiKey = !showApiKey"
+                                class="btn btn-ghost btn-sm" title="显示/隐藏">
+                            <svg x-show="!showApiKey" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            </svg>
+                            <svg x-show="showApiKey" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="display:none">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="settings-field">
+                    <label class="settings-label">API Base</label>
+                    <input type="text" class="settings-input"
+                           x-model="llmConfig.api_base"
+                           placeholder="https://api.deepseek.com">
+                </div>
+                <div class="settings-field">
+                    <label class="settings-label">Model</label>
+                    <input type="text" class="settings-input"
+                           x-model="llmConfig.model"
+                           placeholder="deepseek-v4-flash">
+                </div>
+                <div class="settings-field">
+                    <label class="settings-label">单章字符上限</label>
+                    <input type="number" class="settings-input"
+                           x-model.number="llmConfig.chapter_max_chars"
+                           min="1000" max="200000" step="1000"
+                           placeholder="20000">
+                </div>
+                <div class="settings-actions">
+                    <button type="button" @click="saveLlmSettings()"
+                            class="btn btn-primary btn-sm"
+                            :disabled="llmSaving">
+                        <svg x-show="!llmSaving" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+                        </svg>
+                        <span x-text="llmSaving ? '保存中…' : '保存'"></span>
+                    </button>
+                    <button type="button" @click="testLlmConnection()"
+                            class="btn btn-secondary btn-sm"
+                            :disabled="llmTesting">
+                        <svg x-show="llmTesting" class="w-3.5 h-3.5 animate-spin" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182"/>
+                        </svg>
+                        <span x-text="llmTesting ? '测试中…' : '测试连接'"></span>
+                    </button>
+                </div>
+                <template x-if="llmTestResult">
+                    <div :class="llmTestResult.ok ? 'test-success' : 'test-error'" class="test-result">
+                        <svg x-show="llmTestResult.ok" class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <svg x-show="!llmTestResult.ok" class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+                        </svg>
+                        <span x-text="llmTestResult.ok ? '连接成功 (' + llmTestResult.model + ')' : llmTestResult.reason"></span>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Reading Style Settings -->
+            <div x-show="settingsTab === 'reading'" class="settings-section">
+                <div class="settings-field">
+                    <label class="settings-label">字体大小</label>
+                    <div class="settings-range-row">
+                        <input type="range" class="settings-slider"
+                               x-model.number="readingPrefs.fontSize"
+                               @input="applyReadingPrefs()"
+                               min="14" max="24" step="1">
+                        <span class="settings-range-value" x-text="readingPrefs.fontSize + 'px'"></span>
+                    </div>
+                </div>
+                <div class="settings-field">
+                    <label class="settings-label">字体</label>
+                    <select class="settings-select"
+                            x-model="readingPrefs.fontFamily"
+                            @change="applyReadingPrefs()">
+                        <option value="lora">Lora</option>
+                        <option value="noto-serif">思源宋体 (Noto Serif SC)</option>
+                        <option value="system">系统默认</option>
+                    </select>
+                </div>
+                <div class="settings-field">
+                    <label class="settings-label">背景色</label>
+                    <div class="color-options">
+                        <div @click="readingPrefs.bgColor = '#FAF7F2'; applyReadingPrefs()"
+                             :class="readingPrefs.bgColor === '#FAF7F2' ? 'active' : ''"
+                             class="color-swatch" style="background: #FAF7F2; border-color: #EDE7DC;">
+                        </div>
+                        <div @click="readingPrefs.bgColor = '#F5F0E8'; applyReadingPrefs()"
+                             :class="readingPrefs.bgColor === '#F5F0E8' ? 'active' : ''"
+                             class="color-swatch" style="background: #F5F0E8; border-color: #E5DDD0;">
+                        </div>
+                        <div @click="readingPrefs.bgColor = '#F0F4EE'; applyReadingPrefs()"
+                             :class="readingPrefs.bgColor === '#F0F4EE' ? 'active' : ''"
+                             class="color-swatch" style="background: #F0F4EE; border-color: #D8E0D5;">
+                        </div>
+                        <div @click="readingPrefs.bgColor = '#EEECE8'; applyReadingPrefs()"
+                             :class="readingPrefs.bgColor === '#EEECE8' ? 'active' : ''"
+                             class="color-swatch" style="background: #EEECE8; border-color: #DDD9D3;">
+                        </div>
+                        <div @click="readingPrefs.bgColor = '#2C2825'; applyReadingPrefs()"
+                             :class="readingPrefs.bgColor === '#2C2825' ? 'active' : ''"
+                             class="color-swatch" style="background: #2C2825; border-color: #1A1714;">
+                        </div>
+                    </div>
+                </div>
+                <div class="settings-actions" style="border-top: none; padding-top: 0; margin-top: 0.5rem;">
+                    <button type="button" @click="resetReadingPrefs()"
+                            class="btn btn-ghost btn-sm">重置默认</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Chapter Content -->
     <div class="reader-container py-8">
         <article class="chapter-card">
@@ -145,15 +313,6 @@
                 <div class="flex items-center gap-2 mt-4">
                     <span id="active-status-badge"
                           class="badge badge-pending animate-fade-in delay-1">加载中…</span>
-                    <button id="active-translate-btn" type="button"
-                            class="btn btn-primary btn-sm animate-fade-in delay-2"
-                            style="display:none"
-                            @click="translateChapter(activeChapterId)">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 016-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 01-3.827-5.802"/>
-                        </svg>
-                        翻译本章
-                    </button>
                     <button id="active-retry-btn" type="button"
                             class="btn btn-ghost btn-sm p-1.5 animate-fade-in delay-2"
                             style="display:none"
@@ -222,9 +381,20 @@
             chapterStatus: {},
             navVisible: true,
             catalogGroups: [],
+            // Settings
+            settingsOpen: false,
+            settingsTab: 'llm',
+            llmConfig: { api_key: '', api_base: 'https://api.deepseek.com', model: 'deepseek-v4-flash', chapter_max_chars: 20000 },
+            llmSaving: false,
+            llmTesting: false,
+            llmTestResult: null,
+            showApiKey: false,
+            readingPrefs: { fontSize: 17, fontFamily: 'lora', bgColor: '#FAF7F2' },
             _timer: null,
             _streaming: false,
             _lastScrollY: 0,
+            _apiKeyChecked: false,
+            _hasApiKey: false,
 
             init() {
                 for (const ch of this.chapters) {
@@ -232,6 +402,10 @@
                 }
                 // 初始化目录分组
                 this.buildCatalogGroups();
+                // 加载阅读样式偏好
+                this.loadReadingPrefs();
+                // 检查 API Key
+                this._checkApiKey();
                 // Scroll hide/show toolbar
                 let ticking = false;
                 window.addEventListener('scroll', () => {
@@ -301,6 +475,120 @@
                 if (group) {
                     group.expanded = !group.expanded;
                 }
+            },
+
+            // ---- Settings ----
+            async _checkApiKey() {
+                try {
+                    const res = await fetch('/api/settings');
+                    if (res.ok) {
+                        const data = await res.json();
+                        this._hasApiKey = !!(data.api_key && data.api_key.length > 0);
+                    }
+                } catch (e) { /* ignore */ }
+                this._apiKeyChecked = true;
+            },
+
+            _promptApiKey() {
+                this.settingsOpen = true;
+                this.settingsTab = 'llm';
+                this.llmTestResult = null;
+                this.showApiKey = false;
+                this.openSettings();
+            },
+
+            async openSettings() {
+                this.settingsOpen = true;
+                this.settingsTab = 'llm';
+                this.llmTestResult = null;
+                this.showApiKey = false;
+                try {
+                    const res = await fetch('/api/settings');
+                    if (res.ok) {
+                        const data = await res.json();
+                        this.llmConfig = {
+                            api_key: data.api_key || '',
+                            api_base: data.api_base || 'https://api.deepseek.com',
+                            model: data.model || 'deepseek-v4-flash',
+                            chapter_max_chars: data.chapter_max_chars || 20000,
+                        };
+                    }
+                } catch (e) { /* ignore */ }
+            },
+
+            async saveLlmSettings() {
+                this.llmSaving = true;
+                this.llmTestResult = null;
+                try {
+                    const res = await fetch('/api/settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(this.llmConfig),
+                    });
+                    if (res.ok) {
+                        this.chapterMaxChars = this.llmConfig.chapter_max_chars;
+                        this._hasApiKey = !!(this.llmConfig.api_key && this.llmConfig.api_key.length > 0);
+                        this.settingsOpen = false;
+                        if (this._hasApiKey && this.mode !== 'zh' && this.activeChapterId) {
+                            this.maybeTranslateChapter(this.activeChapterId);
+                        }
+                    }
+                } catch (e) { /* ignore */ }
+                this.llmSaving = false;
+            },
+
+            async testLlmConnection() {
+                this.llmTesting = true;
+                this.llmTestResult = null;
+                await this.saveLlmSettings();
+                try {
+                    const res = await fetch('/api/settings/test-llm', { method: 'POST' });
+                    this.llmTestResult = await res.json();
+                } catch (e) {
+                    this.llmTestResult = { ok: false, reason: '网络错误' };
+                }
+                this.llmTesting = false;
+            },
+
+            loadReadingPrefs() {
+                try {
+                    const saved = localStorage.getItem('vibe_reading_prefs');
+                    if (saved) {
+                        const prefs = JSON.parse(saved);
+                        Object.assign(this.readingPrefs, prefs);
+                    }
+                } catch (e) { /* ignore */ }
+                this.applyReadingPrefs();
+            },
+
+            applyReadingPrefs() {
+                const root = document.documentElement;
+                root.style.setProperty('--reader-font-size', this.readingPrefs.fontSize + 'px');
+
+                const fontMap = {
+                    'lora': "'Lora', 'Noto Serif SC', Georgia, serif",
+                    'noto-serif': "'Noto Serif SC', Georgia, serif",
+                    'system': "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+                };
+                root.style.setProperty('--reader-font-family', fontMap[this.readingPrefs.fontFamily] || fontMap.lora);
+                root.style.setProperty('--reader-bg', this.readingPrefs.bgColor);
+
+                // Dark background mode
+                if (this.readingPrefs.bgColor === '#2C2825') {
+                    document.body.classList.add('reader-dark');
+                } else {
+                    document.body.classList.remove('reader-dark');
+                }
+
+                // Persist
+                try {
+                    localStorage.setItem('vibe_reading_prefs', JSON.stringify(this.readingPrefs));
+                } catch (e) { /* ignore */ }
+            },
+
+            resetReadingPrefs() {
+                this.readingPrefs = { fontSize: 17, fontFamily: 'lora', bgColor: '#FAF7F2' };
+                this.applyReadingPrefs();
             },
 
             navigateTo(id) {
@@ -420,6 +708,26 @@
 
             renderEn(container, content, translated) {
                 if (!translated) {
+                    if (!this._hasApiKey) {
+                        container.innerHTML = `
+                            <div class="flex flex-col items-center justify-center py-16 gap-4">
+                                <svg class="w-10 h-10 text-stone opacity-40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"/>
+                                </svg>
+                                <div class="text-center">
+                                    <p class="text-sm font-medium text-charcoal mb-1">尚未配置翻译引擎</p>
+                                    <p class="text-xs text-stone mb-4">请先在设置中填写 API Key 以启用翻译</p>
+                                    <button type="button" @click="openSettings()" class="btn btn-primary btn-sm">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/>
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                        </svg>
+                                        前往设置
+                                    </button>
+                                </div>
+                            </div>`;
+                        return;
+                    }
                     container.innerHTML = `
                         <div class="flex flex-col items-center justify-center py-16 gap-3">
                             <div class="w-8 h-8 border-2 border-sand border-t-sienna rounded-full animate-spin"></div>
@@ -472,16 +780,12 @@
                 ).join('');
             },
 
-            canTranslate(chapterId) {
-                if (this.mode === 'zh') return false;
-                if (this._streaming) return false;
-                const ch = this.chapterStatus[chapterId];
-                if (!ch) return false;
-                return ch.status !== 'done' && ch.status !== 'empty';
-            },
-
             async translateChapter(chapterId) {
                 if (this._streaming) return;
+                if (!this._hasApiKey) {
+                    this._promptApiKey();
+                    return;
+                }
                 this._streaming = true;
                 const container = document.getElementById('chapter-body');
 
@@ -587,6 +891,7 @@
                 if (chapterId == null) return;
                 if (this.mode === 'zh') return;
                 if (this._streaming) return;
+                if (!this._hasApiKey) return;
                 const ch = this.chapterStatus[chapterId];
                 if (!ch) return;
                 if (ch.char_count > this.chapterMaxChars) return;
@@ -598,6 +903,7 @@
             maybeTranslateChapter(chapterId) {
                 if (chapterId == null) return;
                 if (this._streaming) return;
+                if (!this._hasApiKey) return;
                 const ch = this.chapterStatus[chapterId];
                 if (!ch) return;
                 if (ch.char_count > this.chapterMaxChars) return;
@@ -649,13 +955,11 @@
                 const ch = this.chapterStatus[this.activeChapterId];
                 if (!ch) return;
                 const badge = document.getElementById('active-status-badge');
-                const btn = document.getElementById('active-translate-btn');
                 const retryBtn = document.getElementById('active-retry-btn');
 
                 // Chinese mode: hide translation controls
                 if (this.mode === 'zh') {
                     if (badge) badge.style.display = 'none';
-                    if (btn) btn.style.display = 'none';
                     if (retryBtn) retryBtn.style.display = 'none';
                     return;
                 }
@@ -664,9 +968,6 @@
                     badge.textContent = this.badgeText(ch);
                     badge.className = 'badge ' + this.badgeClass(ch);
                     badge.style.display = '';
-                }
-                if (btn) {
-                    btn.style.display = this.canTranslate(this.activeChapterId) ? '' : 'none';
                 }
                 if (retryBtn) {
                     retryBtn.style.display = (ch.status === 'done' || ch.status === 'failed') ? '' : 'none';

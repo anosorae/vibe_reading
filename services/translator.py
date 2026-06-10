@@ -12,26 +12,16 @@
 from __future__ import annotations
 
 import json
-import os
-import re
 from typing import AsyncIterator, Optional
 
-from dotenv import load_dotenv
 from openai import APIError, AsyncOpenAI
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
 from models import Book, Chapter
+from services.settings import get_llm_config
 
-load_dotenv()
-
-LLM_API_KEY: str = os.getenv("LLM_API_KEY", os.getenv("DEEPSEEK_API_KEY", "")).strip()
-LLM_API_BASE: str = os.getenv("LLM_API_BASE", os.getenv("DEEPSEEK_API_BASE", "https://api.deepseek.com")).rstrip("/")
-LLM_MODEL: str = os.getenv("LLM_MODEL", os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash"))
-CHAPTER_MAX_CHARS: int = int(os.getenv("CHAPTER_MAX_CHARS", "20000"))
 PREV_CHAPTER_MAX_CHARS: int = 30000
-
-_IS_DEEPSEEK = "deepseek" in LLM_API_BASE.lower()
 
 STATUS_TOO_LONG = 3
 
@@ -101,6 +91,13 @@ async def translate_chapter(
       {"status": "failed", "reason": "..."}
       {"status": "skipped", "reason": "..."}
     """
+    config = get_llm_config()
+    api_key = config["api_key"]
+    api_base = config["api_base"]
+    model = config["model"]
+    chapter_max_chars = config["chapter_max_chars"]
+    is_deepseek = config["is_deepseek"]
+
     # 1) 加载章节
     async with session_maker() as s:
         chapter = await s.get(Chapter, chapter_id)
@@ -115,15 +112,15 @@ async def translate_chapter(
 
     # 2) 超长拒绝
     char_count = len(chapter_content)
-    if char_count > CHAPTER_MAX_CHARS:
-        print(f"[translator] chapter {chapter_id} 过长: {char_count} chars > {CHAPTER_MAX_CHARS}")
+    if char_count > chapter_max_chars:
+        print(f"[translator] chapter {chapter_id} 过长: {char_count} chars > {chapter_max_chars}")
         async with session_maker() as s:
             ch = await s.get(Chapter, chapter_id)
             ch.status = STATUS_TOO_LONG
             await s.commit()
         return {"status": "too_long", "char_count": char_count}
 
-    if not LLM_API_KEY:
+    if not api_key:
         return {"status": "skipped", "reason": "LLM_API_KEY 未配置"}
 
     # 3) 标记为翻译中
@@ -146,12 +143,12 @@ async def translate_chapter(
     # 6) 调用 LLM
     try:
         client = AsyncOpenAI(
-            api_key=LLM_API_KEY,
-            base_url=LLM_API_BASE,
+            api_key=api_key,
+            base_url=api_base,
             timeout=120.0,
         )
         create_kwargs = dict(
-            model=LLM_MODEL,
+            model=model,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
@@ -159,7 +156,7 @@ async def translate_chapter(
             temperature=0.3,
             max_tokens=16000,
         )
-        if _IS_DEEPSEEK:
+        if is_deepseek:
             create_kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
         response = await client.chat.completions.create(**create_kwargs)
         translated_text = (response.choices[0].message.content or "").strip()
@@ -217,6 +214,13 @@ async def translate_chapter_stream(
       {"type": "done", "text": "..."}
       {"type": "error", "reason": "..."}
     """
+    config = get_llm_config()
+    api_key = config["api_key"]
+    api_base = config["api_base"]
+    model = config["model"]
+    chapter_max_chars = config["chapter_max_chars"]
+    is_deepseek = config["is_deepseek"]
+
     def _emit(event: dict) -> str:
         return json.dumps(event, ensure_ascii=False)
 
@@ -236,7 +240,7 @@ async def translate_chapter_stream(
 
     # 2) 超长拒绝
     char_count = len(chapter_content)
-    if char_count > CHAPTER_MAX_CHARS:
+    if char_count > chapter_max_chars:
         async with session_maker() as s:
             ch = await s.get(Chapter, chapter_id)
             ch.status = STATUS_TOO_LONG
@@ -244,7 +248,7 @@ async def translate_chapter_stream(
         yield _emit({"type": "status", "status": "too_long", "char_count": char_count})
         return
 
-    if not LLM_API_KEY:
+    if not api_key:
         yield _emit({"type": "error", "reason": "LLM_API_KEY 未配置"})
         return
 
@@ -270,12 +274,12 @@ async def translate_chapter_stream(
     # 6) 流式调用 LLM
     try:
         client = AsyncOpenAI(
-            api_key=LLM_API_KEY,
-            base_url=LLM_API_BASE,
+            api_key=api_key,
+            base_url=api_base,
             timeout=120.0,
         )
         create_kwargs = dict(
-            model=LLM_MODEL,
+            model=model,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
@@ -284,7 +288,7 @@ async def translate_chapter_stream(
             max_tokens=16000,
             stream=True,
         )
-        if _IS_DEEPSEEK:
+        if is_deepseek:
             create_kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
 
         stream = await client.chat.completions.create(**create_kwargs)

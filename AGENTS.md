@@ -9,9 +9,9 @@
 
 ## Environment
 
-- Edit `.env` with `LLM_API_KEY`, `LLM_API_BASE`, `LLM_MODEL`. Also accepts old `DEEPSEEK_*` names as fallback.
-- Key vars: `LLM_API_KEY`, `LLM_API_BASE` (default `https://api.deepseek.com`), `LLM_MODEL` (default `deepseek-v4-flash`), `CHAPTER_MAX_CHARS` (default 20000).
-- `.env` is gitignored.
+- LLM configuration is done via the Web UI settings modal (persisted to `settings.json`, gitignored).
+- Default config: `api_base` = `https://api.deepseek.com`, `model` = `deepseek-v4-flash`, `chapter_max_chars` = 20000.
+- `settings.json` is gitignored. No `.env` file needed.
 
 ## Architecture
 
@@ -30,13 +30,14 @@
 - **Re-translation**: ↻ button appears on done/failed chapters. Calls `/api/reset-chapter` to reset status to pending, then triggers fresh translation.
 - **Scroll-hide navbar**: Navigation bar hides on scroll down, shows on scroll up. Uses Alpine.js `x-show` with CSS transitions.
 - **Chinese mode**: Hides translation status badge, translate button, and retry button when in pure Chinese reading mode.
+- **Settings modal**: LLM config (API Key, Base, Model, max chars) + reading style (font size, font family, background color). Test connection button validates API Key.
 
 ## Key Conventions
 
 - No Paragraph model. Book → Chapter only. Chapter stores `content` (original) and `translated_content` (English only).
 - `books.last_read_chapter_id`: nullable, references `chapters.id`, tracks reading position.
 - `chapters.status`: 0 = pending, 1 = in_progress, 2 = done, -1 = failed, 3 = too_long
-- Chapters > `CHAPTER_MAX_CHARS` chars are rejected outright (status=3).
+- Chapters > `CHAPTER_MAX_CHARS` chars are rejected outright (status=3). This value is configurable via settings.
 - Previous chapter's English translation is used as context (truncated to 30K chars).
 - LLM produces English-only translation with [N] paragraph markers. Frontend renders EN paragraphs; click any paragraph to show original CN underneath (lighter font).
 - Two reading modes: 中文 (Chinese only, hides translation controls) and 英文 (English with click-to-show original).
@@ -56,6 +57,9 @@
 | `POST` | `/api/reset-chapter/{id}` | Reset chapter status to pending |
 | `POST` | `/api/reading-progress/{book_id}` | Save reading progress |
 | `GET` | `/api/chapter-status/{book_id}` | Get all chapters' status |
+| `GET` | `/api/settings` | Get LLM settings (API Key masked) |
+| `POST` | `/api/settings` | Save LLM settings |
+| `POST` | `/api/settings/test-llm` | Test LLM connection |
 
 ## Think Before Coding
 

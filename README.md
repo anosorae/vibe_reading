@@ -28,7 +28,7 @@
 
 | 层 | 选型 |
 | --- | --- |
-| 后端 | FastAPI · Jinja2 · SQLAlchemy 2 (async) · SQLite (aiosqlite) · openai (官方 SDK) · python-dotenv |
+| 后端 | FastAPI · Jinja2 · SQLAlchemy 2 (async) · SQLite (aiosqlite) · openai (官方 SDK) |
 | 前端 | 原生 HTML + Jinja2 模板 · TailwindCSS (CDN) · Alpine.js (CDN) |
 | LLM | OpenAI Chat Completions 兼容格式 (DeepSeek / 通义千问 / 智谱 / Ollama 等) |
 
@@ -54,30 +54,7 @@ uv sync
 
 `uv` 会自动创建 `.venv/` 虚拟环境并安装 `pyproject.toml` 中声明的所有依赖。`uv.lock` 保证跨机器一致版本, **已入库, 请勿删除**。
 
-### 2. 配置环境变量
-
-编辑 `.env`, 填入你的 LLM API Key:
-
-```ini
-LLM_API_KEY=sk-你的真实-key
-LLM_API_BASE=https://api.deepseek.com
-LLM_MODEL=deepseek-v4-flash
-CHAPTER_MAX_CHARS=20000
-```
-
-支持任何 OpenAI Chat Completions 兼容接口:
-
-| 提供方 | LLM_API_BASE | LLM_MODEL |
-| --- | --- | --- |
-| DeepSeek | `https://api.deepseek.com` | `deepseek-v4-flash` |
-| 通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
-| 智谱 | `https://open.bigmodel.cn/api/paas/v4` | `glm-4-flash` |
-| Moonshot | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` |
-| 本地 Ollama | `http://localhost:11434/v1` | `qwen2.5:7b` |
-
-> 也兼容旧变量名 `DEEPSEEK_API_KEY` / `DEEPSEEK_API_BASE` / `DEEPSEEK_MODEL`, 优先读 `LLM_*`。
-
-### 3. 启动
+### 2. 启动
 
 ```bash
 uv run main.py
@@ -86,6 +63,20 @@ uv run main.py
 浏览器打开 http://127.0.0.1:8000
 
 数据库 `vibe_reading.db` 与上传目录 `uploads/` 首次启动时自动创建。
+
+### 3. 配置 LLM
+
+在阅读界面的工具栏中点击 **设置** 按钮, 填入你的 LLM API Key、API Base 和 Model, 点击"保存"。可使用"测试连接"验证配置是否正确。
+
+支持任何 OpenAI Chat Completions 兼容接口:
+
+| 提供方 | API Base | Model |
+| --- | --- | --- |
+| DeepSeek | `https://api.deepseek.com` | `deepseek-v4-flash` |
+| 通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
+| 智谱 | `https://open.bigmodel.cn/api/paas/v4` | `glm-4-flash` |
+| Moonshot | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` |
+| 本地 Ollama | `http://localhost:11434/v1` | `qwen2.5:7b` |
 
 ### 不使用 uv (备选)
 
@@ -108,17 +99,17 @@ vibe_reading/
 ├── services/
 │   ├── __init__.py
 │   ├── parser.py            # TXT 解析与入库
-│   └── translator.py        # LLM 调用, 单章 translate_chapter()
+│   ├── translator.py        # LLM 调用, 单章 translate_chapter()
+│   └── settings.py          # 设置读写 (settings.json 持久化)
 ├── templates/
 │   ├── base.html            # 引入 Tailwind + Alpine.js CDN
 │   ├── index.html           # 书架 + 上传表单 + 继续阅读
-│   └── reader.html          # 阅读模式 + 状态徽章 + 重新翻译 + 滚动隐藏导航栏
+│   └── reader.html          # 阅读模式 + 状态徽章 + 设置弹窗 + 滚动隐藏导航栏
 ├── static/                  # 静态资源 (预留)
 ├── uploads/                 # 上传的 TXT 落盘目录
 ├── pyproject.toml           # 项目元数据 + 依赖 (uv 读取)
 ├── uv.lock                  # 锁定依赖版本 (入库)
 ├── requirements.txt         # 备选, 不使用 uv 时用
-├── .env                     # 环境变量 (不入库)
 ├── .gitignore
 └── README.md
 ```
@@ -243,10 +234,10 @@ Chapter: {章节标题}
 ## 常见问题
 
 **没有 API Key 能用吗?**
-可以。上传 / 解析 / 中文阅读完全正常, 切换到英文时会显示"翻译中…", 翻译需要配置 API Key。
+可以。上传 / 解析 / 中文阅读完全正常, 切换到英文时会提示"翻译中…", 翻译需要在设置中配置 API Key。
 
 **想换 OpenAI / 智谱 / 自建网关?**
-`.env` 改 `LLM_API_KEY`、`LLM_API_BASE`、`LLM_MODEL` 即可。DeepSeek 特有的 `extra_body` 参数会自动跳过, 无需手动处理。也兼容旧变量名 `DEEPSEEK_*`。
+在阅读界面点击工具栏的"设置"按钮, 修改 API Base 和 Model 即可。DeepSeek 特有的 `extra_body` 参数会自动跳过, 无需手动处理。
 
 **端口 8000 被占用?**
 改 `main.py` 末尾 `uvicorn.run(..., port=8000)` 即可。
