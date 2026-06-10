@@ -2,45 +2,53 @@
 
 ## Dependencies & Running
 
-- **uv** is the only supported dep manager. `uv sync` to install, `uv run main.py` to start.
-- Server runs on `http://127.0.0.1:8000`, no hot reload.
-- `uv.lock` is committed — do not delete or regenerate.
-- pip/venv fallback exists (`requirements.txt`) but prefer uv.
+- **uv** only. `uv sync` to install, `uv run main.py` to start.
+- Server on `http://127.0.0.1:8000`, no hot reload.
+- `uv.lock` committed — do not delete or regenerate.
+- pip/venv fallback (`requirements.txt`) exists but prefer uv.
 
 ## Environment
 
-- LLM configuration is done via the Web UI settings modal (persisted to `settings.json`, gitignored).
-- Default config: `api_base` = `https://api.deepseek.com`, `model` = `deepseek-v4-flash`, `chapter_max_chars` = 20000.
-- `settings.json` is gitignored. No `.env` file needed.
+- LLM config via Web UI settings modal → `settings.json` (gitignored).
+- Default: `api_base` = `https://api.deepseek.com`, `model` = `deepseek-v4-flash`, `chapter_max_chars` = 20000.
+- No `.env` file.
 
 ## Architecture
 
-- Single FastAPI app in `main.py` (no routers, no `__init__.py` package).
-- SQLite + SQLAlchemy 2 async (`aiosqlite`). Tables auto-created at startup — no migrations.
-- DB file `vibe_reading.db` is gitignored.
-- Uploads stored in `uploads/` (gitignored).
-- No npm/Vite — frontend is Jinja2 + TailwindCSS CDN + Alpine.js CDN.
-- Translation calls LLM via OpenAI SDK (`AsyncOpenAI`) with streaming (`stream=True`). Supports any OpenAI-compatible provider. DeepSeek thinking mode auto-disabled when base_url contains "deepseek".
-- Translation is streamed via SSE (`POST /translate/stream/{id}`). Frontend reads `ReadableStream`, displays tokens in real-time, then reloads chapter on completion.
-- **Upload does NOT auto-translate.** Translation is per-chapter, triggered by user action or auto on navigation to en mode.
+- Single FastAPI app in `main.py` — no routers, no `__init__.py` package.
+- SQLite + SQLAlchemy 2 async (`aiosqlite`). Tables auto-created at startup; no migrations.
+- DB file `vibe_reading.db` is gitignored. Uploads in `uploads/` (gitignored).
+- Frontend: Jinja2 + TailwindCSS CDN + Alpine.js CDN. No npm/Vite.
+- Translation: `AsyncOpenAI` SDK, streaming (`stream=True`). SSE via `POST /translate/stream/{id}`.
+- Upload does NOT auto-translate. Translation is per-chapter, triggered on en mode navigation.
+
+## Theme System
+
+- Two themes via `data-theme` attribute on `<html>`: `vibe` (原木, warm brown) and `weread` (青简, muted green).
+- All palette colors defined as CSS custom properties in `:root` and overridden in `[data-theme="weread"]`.
+- Semantic utility classes replace Tailwind color utilities: `text-accent`, `text-primary`, `text-muted`, `bg-accent-subtle`, `border-divider`, `hover-text-accent`, etc.
+- Tailwind config references CSS variables (`var(--color-xxx)`) so Tailwind classes (`text-charcoal`, `bg-sage-light`, etc.) also respond to theme.
+- Theme persisted in `localStorage('vibe_theme')`; inline script in `<head>` reads it before paint to prevent FOUC.
+- Theme toggle in navbar (homepage only; reader overrides `{% block nav %}` to hide nav).
 
 ## Key Features
 
-- **Reading progress**: Server-side storage (`books.last_read_chapter_id`). Saved on chapter navigation. Homepage shows "继续阅读" for books with progress. Reader auto-restores last position on open.
-- **Re-translation**: ↻ button appears on done/failed chapters. Calls `/api/reset-chapter` to reset status to pending, then triggers fresh translation.
-- **Scroll-hide navbar**: Navigation bar hides on scroll down, shows on scroll up. Uses Alpine.js `x-show` with CSS transitions.
-- **Chinese mode**: Hides translation status badge, translate button, and retry button when in pure Chinese reading mode.
-- **Settings modal**: LLM config (API Key, Base, Model, max chars) + reading style (font size, font family, background color). Test connection button validates API Key.
+- **Reading progress**: `books.last_read_chapter_id` saved on chapter navigation. Homepage shows "继续阅读". Reader restores last position on open.
+- **Re-translation**: ↻ button on done/failed chapters. Calls `/api/reset-chapter` then triggers fresh translation.
+- **Scroll-hide navbar**: Hides on scroll down, shows on scroll up. Alpine `x-show` + CSS transitions.
+- **Chinese mode**: Hides translation status badge, translate button, and retry button.
+- **Settings modal**: LLM config (API Key, Base, Model, max chars, context boost, thinking mode) + reading style (font size, font family, background color, theme). Test connection button.
+- **Stream abort on navigation**: `AbortController` attached to translate fetch; `navigateTo()` aborts ongoing stream before switching chapters. Stream completion handler checks `activeChapterId` before loading chapter content.
 
 ## Key Conventions
 
 - No Paragraph model. Book → Chapter only. Chapter stores `content` (original) and `translated_content` (English only).
-- `books.last_read_chapter_id`: nullable, references `chapters.id`, tracks reading position.
 - `chapters.status`: 0 = pending, 1 = in_progress, 2 = done, -1 = failed, 3 = too_long
-- Chapters > `CHAPTER_MAX_CHARS` chars are rejected outright (status=3). This value is configurable via settings.
-- Previous chapter's English translation is used as context (truncated to 30K chars).
-- LLM produces English-only translation with [N] paragraph markers. Frontend renders EN paragraphs; click any paragraph to show original CN underneath (lighter font).
+- Chapters exceeding `chapter_max_chars` rejected outright (status=3). Value configurable via settings.
+- Previous chapter's English translation used as context (truncated to 30K chars).
+- LLM produces English-only translation with `[N]` paragraph markers. Frontend renders EN paragraphs; click to show original CN underneath.
 - Two reading modes: 中文 (Chinese only, hides translation controls) and 英文 (English with click-to-show original).
+- Backend `translate_chapter_stream` has `try/finally` that resets status from 1 to -1 on client disconnect (GeneratorExit/CancelledError).
 - No test framework, no lint/typecheck config.
 - All SQLite I/O uses executemany for bulk inserts.
 
