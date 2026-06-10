@@ -304,7 +304,8 @@ async def translate_chapter_stream(
         prev_chapter_english=prev_english,
     )
 
-    # 6) 流式调用 LLM
+    # 6) 流式调用 LLM + 写回 DB
+    translation_done = False
     try:
         client = AsyncOpenAI(
             api_key=api_key,
@@ -345,6 +346,24 @@ async def translate_chapter_stream(
             yield _emit({"type": "error", "reason": "empty response"})
             return
 
+        # 7) 写回 DB
+        translated = full_text.strip()
+        async with session_maker() as s:
+            ch = await s.get(Chapter, chapter_id)
+            ch.translated_content = translated
+            ch.status = 2
+            total_done = (await s.execute(
+                select(func.count(Chapter.id))
+                .where(Chapter.book_id == book_id, Chapter.status == 2)
+            )).scalar() or 0
+            book = await s.get(Book, book_id)
+            if book is not None:
+                book.translated_chapters = total_done
+            await s.commit()
+
+        translation_done = True
+        yield _emit({"type": "done", "text": translated})
+
     except APIError as exc:
         print(f"[translator] chapter {chapter_id} API error: {exc!r}")
         async with session_maker() as s:
@@ -361,19 +380,11 @@ async def translate_chapter_stream(
             await s.commit()
         yield _emit({"type": "error", "reason": f"unexpected: {exc!r}"})
         return
-
-    # 7) 写回 DB
-    async with session_maker() as s:
-        ch = await s.get(Chapter, chapter_id)
-        ch.translated_content = full_text.strip()
-        ch.status = 2
-        total_done = (await s.execute(
-            select(func.count(Chapter.id))
-            .where(Chapter.book_id == book_id, Chapter.status == 2)
-        )).scalar() or 0
-        book = await s.get(Book, book_id)
-        if book is not None:
-            book.translated_chapters = total_done
-        await s.commit()
-
-    yield _emit({"type": "done", "text": full_text.strip()})
+    finally:
+        # 客户端断开连接 (GeneratorExit/CancelledError) 时重置状态
+        if not translation_done:
+            async with session_maker() as s:
+                ch = await s.get(Chapter, chapter_id)
+                if ch is not None and ch.status == 1:
+                    ch.status = -1
+                    await s.commit()

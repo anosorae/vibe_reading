@@ -1007,6 +1007,12 @@ body::before {
     border-radius: 1px 1px 0 0;
 }
 
+.settings-body {
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
 .settings-section {
     padding: 1.25rem 1.5rem;
 }

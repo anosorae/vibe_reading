@@ -177,6 +177,7 @@
                         :class="settingsTab === 'reading' ? 'active' : ''"
                         class="settings-tab">阅读样式</button>
             </div>
+            <div class="settings-body">
 
             <!-- LLM Settings -->
             <div x-show="settingsTab === 'llm'" class="settings-section">
@@ -342,6 +343,7 @@
                             class="btn btn-ghost btn-sm">重置默认</button>
                 </div>
             </div>
+            </div>
         </div>
     </div>
 
@@ -438,6 +440,7 @@
             readingPrefs: { fontSize: 17, fontFamily: 'lora', bgColor: '#FAF7F2' },
             _timer: null,
             _streaming: false,
+            _abortController: null,
             _lastScrollY: 0,
             _apiKeyChecked: false,
             _hasApiKey: false,
@@ -651,6 +654,12 @@
 
             navigateTo(id) {
                 if (this.activeChapterId === id) return;
+                // 导航到其他章节时中止当前正在进行的翻译流
+                if (this._abortController) {
+                    this._abortController.abort();
+                    this._abortController = null;
+                }
+                this._streaming = false;
                 this.activeChapterId = id;
                 const ch = this.chapters.find(c => c.id === id);
                 this.currentTitle = ch ? ch.title : '';
@@ -839,7 +848,12 @@
             },
 
             async translateChapter(chapterId) {
-                if (this._streaming) return;
+                // 中止任何正在进行的翻译流（例如卡在 in_progress 的情况）
+                if (this._abortController) {
+                    this._abortController.abort();
+                    this._abortController = null;
+                }
+                this._streaming = false;
                 if (!this._hasApiKey) {
                     this._promptApiKey();
                     return;
@@ -877,9 +891,10 @@
                         </div>`;
                 }
 
+                this._abortController = new AbortController();
                 let accumulated = '';
                 try {
-                    const res = await fetch('/translate/stream/' + chapterId, { method: 'POST' });
+                    const res = await fetch('/translate/stream/' + chapterId, { method: 'POST', signal: this._abortController.signal });
                     if (!res.ok) {
                         const err = await res.json().catch(() => ({}));
                         throw new Error(err.detail || err.reason || 'HTTP ' + res.status);
@@ -919,21 +934,32 @@
                     }
 
                     this._streaming = false;
+                    this._abortController = null;
                     if (this.chapterStatus[chapterId]) {
                         this.chapterStatus[chapterId].status = 'done';
                     }
                     this.updateBadge(this.chapterStatus[chapterId]);
                     await this.fetchStatus();
-                    this.loadChapter(chapterId);
+                    if (this.activeChapterId === chapterId) {
+                        this.loadChapter(chapterId);
+                    }
 
                 } catch (e) {
+                    if (e.name === 'AbortError') {
+                        // 用户导航到其他章节，正常中止；_streaming 由 navigateTo 管理
+                        if (this.chapterStatus[chapterId]) {
+                            this.chapterStatus[chapterId].status = 'failed';
+                        }
+                        return;
+                    }
                     console.error('translateChapter failed:', e);
                     this._streaming = false;
+                    this._abortController = null;
                     if (this.chapterStatus[chapterId]) {
                         this.chapterStatus[chapterId].status = 'failed';
                     }
                     this.updateBadge(this.chapterStatus[chapterId]);
-                    if (container) {
+                    if (container && this.activeChapterId === chapterId) {
                         container.innerHTML = `
                             <div class="flex flex-col items-center justify-center py-16 gap-3">
                                 <svg class="w-8 h-8 text-red-muted" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
@@ -965,7 +991,12 @@
                 const ch = this.chapterStatus[chapterId];
                 if (!ch) return;
                 if (ch.char_count > this.chapterMaxChars) return;
-                if (ch.status === 'in_progress' || ch.status === 'done') return;
+                if (ch.status === 'done') return;
+                if (ch.status === 'in_progress') {
+                    // 无活跃流但状态为 in_progress → 过期状态（如服务器重启后），自动恢复
+                    this.translateChapter(chapterId);
+                    return;
+                }
                 if (ch.status === 'pending' || ch.status === 'failed') {
                     this.translateChapter(chapterId);
                 }
@@ -1028,7 +1059,7 @@
                     badge.style.display = '';
                 }
                 if (retryBtn) {
-                    retryBtn.style.display = (ch.status === 'done' || ch.status === 'failed') ? '' : 'none';
+                    retryBtn.style.display = (ch.status === 'done' || ch.status === 'failed' || ch.status === 'in_progress') ? '' : 'none';
                 }
             },
 
